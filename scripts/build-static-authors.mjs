@@ -47,11 +47,17 @@ for (const page of ['category', 'mps']) {
     legalComments: 'inline',
     minifyWhitespace: page === 'mps',
   });
-  const confirmationStyles =
+  const mpsStyles =
     page === 'mps'
-      ? (await readFile(new URL('demand-confirmation.css', root), 'utf8')) +
-        '\n' +
-        (await readFile(new URL('workflow.css', root), 'utf8'))
+      ? (
+          await Promise.all(
+            [
+              new URL('../theme/tokens.css', import.meta.url),
+              new URL('demand-confirmation.css', root),
+              new URL('workflow.css', root),
+            ].map((file) => readFile(file, 'utf8')),
+          )
+        ).join('\n')
       : '';
   const script = files['vendor.js'] + '\n' + author.outputFiles[0].text;
   const html = files['shell.html']
@@ -59,13 +65,7 @@ for (const page of ['category', 'mps']) {
     .replace(
       '__WORKBENCH_AUTHOR_STYLES__',
       () =>
-        files['vendor.css'] +
-        '\n' +
-        files['layout.css'] +
-        '\n' +
-        questionStyles +
-        '\n' +
-        confirmationStyles,
+        files['vendor.css'] + '\n' + files['layout.css'] + '\n' + questionStyles + '\n' + mpsStyles,
     );
   const bytes = Buffer.byteLength(html);
   if (bytes > maxHtmlBytes) throw Error(`HTML_TOO_LARGE: ${page} (${bytes} > ${maxHtmlBytes})`);

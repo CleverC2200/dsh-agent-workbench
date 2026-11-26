@@ -1,4 +1,6 @@
+import { createCalculationHelp } from './calculation-help.js';
 import { useStepViewField } from './step-view-state.js';
+import { createReportPage, renderTablePagination } from './report-page.js';
 import { defaultProductionCalendar, productionCalendarRule } from './production-calendar.js';
 
 const offset = (month, count) => {
@@ -9,6 +11,8 @@ const offset = (month, count) => {
 
 export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCsv }) {
   const h = react.createElement;
+  const CalculationHelp = createCalculationHelp(react);
+  const ReportPage = createReportPage(react);
   return function CapacityReport({
     plan,
     draft,
@@ -64,7 +68,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
       {},
     );
     const disclosure = (key) => ({
-      className: 'wf-plan-disclosure',
+      className: 'wf-plan-disclosure mps-report-details',
       open: Boolean(disclosures[key]),
       onToggle: (event) => {
         if (event.target === event.currentTarget)
@@ -152,6 +156,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         (!filters.search || `${row.code} ${row.name}`.includes(filters.search)),
     );
     const shownIssues = demandIssues.filter((row) => row.month === month);
+    const annualIssues = report.annualIssues.filter(byBase);
+    const odmArrivals = (plan.odmArrivals ?? []).filter(
+      (row) => !filters.base || row.base === filters.base || row.demandBase === filters.base,
+    );
     const issueIndex = Math.min(issuePage, Math.max(0, Math.ceil(shownIssues.length / 25) - 1));
     const dataState = (row) =>
       row.capacity === null
@@ -254,17 +262,15 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
       null,
       h(
         'div',
-        { className: 'wf-actions' },
-        h(
-          'span',
-          null,
-          `发货基准月 ${report.referenceMonth}，当前展示 ${month} · 单位：吨。基准月取年度SKU需求，M+1至M+3取本轮拆分，M+4为年度参考。RCCP比较内部需求与隧道能力，实际排产及缺项以本轮求解结果为准。`,
-        ),
+        { className: 'dc-card-head mps-report-heading' },
+        h('h3', null, '产能评估报告'),
+        h('span', null, `${month} · 吨`),
         h('button', { onClick: () => setRulesOpen(true) }, '口径与规则'),
         h(
           'button',
           {
-            disabled: !active,
+            className: 'mps-download',
+            disabled: !active || !exportRows.length,
             onClick: () =>
               downloadCsv(
                 `${draft.month}-产能评估报告.csv`,
@@ -321,11 +327,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         h(
           react.Fragment,
           null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '已知隧道利用率未包含缺项需求；完整隧道利用率、余量及缺口待补。',
-          ),
           rccpTable(
             [
               '基地',
@@ -443,78 +444,60 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
       ),
       card(
         '需求与折吨缺项',
+        shownIssues.length
+          ? h(
+              'details',
+              disclosure('issues'),
+              h('summary', null, `查看${month}缺项明细 ${shownIssues.length}项`),
+              shownIssues.length
+                ? table(
+                    '需求与折吨缺项',
+                    ['基地', '大类', 'SKU', '问题分类', '具体原因', '历史参考物料'],
+                    shownIssues
+                      .slice(issueIndex * 25, (issueIndex + 1) * 25)
+                      .map((row) => [
+                        row.base,
+                        row.category,
+                        `${row.code} ${row.name}`,
+                        row.kind,
+                        row.reason,
+                        row.referenceCode,
+                      ]),
+                  )
+                : null,
+              shownIssues.length > 25
+                ? renderTablePagination(h, {
+                    label: '需求与折吨缺项',
+                    page: issueIndex,
+                    total: shownIssues.length,
+                    onPageChange: setIssuePage,
+                  })
+                : null,
+            )
+          : h('p', { role: 'status' }, '当前范围暂无缺项'),
         h(
-          react.Fragment,
-          null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            `${month}当前范围有${shownIssues.length}个单品月份未形成需求吨数；下表区分缺大类需求、缺历史拆分依据、缺拆分依据与缺件吨系数。缺项不作为0需求，也不表示缺产能。`,
-          ),
-          h(
-            'button',
-            {
-              disabled: !active || !demandIssues.length,
-              onClick: () => {
-                const rows = demandIssues.map((row) => ({
-                  月份: row.month,
-                  基地: row.base,
-                  大类: row.category,
-                  物料组: row.group,
-                  产品编码: row.code,
-                  产品名称: row.name,
-                  问题分类: row.kind,
-                  具体原因: row.reason,
-                  历史参考物料: row.referenceCode,
-                  来源: row.sourceTable,
-                  字段: row.fields,
-                }));
-                downloadCsv(`${draft.month}-需求与折吨缺项.csv`, Object.keys(rows[0] ?? {}), rows);
-              },
+          'button',
+          {
+            className: 'mps-download',
+            disabled: !active || !shownIssues.length,
+            onClick: () => {
+              const rows = shownIssues.map((row) => ({
+                月份: row.month,
+                基地: row.base,
+                大类: row.category,
+                物料组: row.group,
+                产品编码: row.code,
+                产品名称: row.name,
+                问题分类: row.kind,
+                具体原因: row.reason,
+                历史参考物料: row.referenceCode,
+                来源: row.sourceTable,
+                字段: row.fields,
+              }));
+              downloadCsv(`${draft.month}-需求与折吨缺项.csv`, Object.keys(rows[0] ?? {}), rows);
             },
-            '导出需求与折吨缺项',
-          ),
-          h(
-            'details',
-            disclosure('issues'),
-            h('summary', null, `查看${month}缺项明细 ${shownIssues.length}项`),
-            shownIssues.length
-              ? table(
-                  '需求与折吨缺项',
-                  ['基地', '大类', 'SKU', '问题分类', '具体原因', '历史参考物料'],
-                  shownIssues
-                    .slice(issueIndex * 25, (issueIndex + 1) * 25)
-                    .map((row) => [
-                      row.base,
-                      row.category,
-                      `${row.code} ${row.name}`,
-                      row.kind,
-                      row.reason,
-                      row.referenceCode,
-                    ]),
-                )
-              : h('p', { className: 'wf-note' }, '当前月份和筛选范围的需求吨数无缺项。'),
-            shownIssues.length > 25
-              ? h(
-                  'div',
-                  { className: 'wf-actions' },
-                  h(
-                    'button',
-                    { disabled: issueIndex === 0, onClick: () => setIssuePage(issueIndex - 1) },
-                    '上一页',
-                  ),
-                  h('span', null, `第${issueIndex + 1}页，共${shownIssues.length}项`),
-                  h(
-                    'button',
-                    {
-                      disabled: (issueIndex + 1) * 25 >= shownIssues.length,
-                      onClick: () => setIssuePage(issueIndex + 1),
-                    },
-                    '下一页',
-                  ),
-                )
-              : null,
-          ),
+          },
+          '导出需求与折吨缺项',
         ),
       ),
       card(
@@ -522,51 +505,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         h(
           react.Fragment,
           null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '单位：件/月。按有效需求、目标期末库存减可用期初库存的净缺口默认估算，不占内部产能。只在收货点记录一次外部到货，后续逐段调拨。当前来源未提供实际供方名称，按ODM默认供给口径汇总，供方真实能力、交期及实际到货尚未验证。缺需求、库存或来源冲突的单品仍待补。',
-          ),
-          h(
-            'button',
-            {
-              disabled: !active,
-              onClick: () =>
-                downloadCsv(
-                  `${draft.month}-ODM默认计划到货.csv`,
-                  [
-                    '月份',
-                    '供方口径',
-                    '产品编码',
-                    '收货基地',
-                    '需求基地',
-                    '默认计划到货量（件）',
-                    '默认计划到货吨数',
-                    '后续调拨路径',
-                    '说明',
-                  ],
-                  (plan.odmArrivals ?? [])
-                    .filter(
-                      (row) =>
-                        !filters.base ||
-                        row.base === filters.base ||
-                        row.demandBase === filters.base,
-                    )
-                    .map((row) => ({
-                      月份: row.month,
-                      供方口径: 'ODM默认供给，实际供方待确认',
-                      产品编码: row.code,
-                      收货基地: row.base,
-                      需求基地: row.demandBase,
-                      '默认计划到货量（件）': row.quantity,
-                      默认计划到货吨数: row.tons,
-                      后续调拨路径: row.path.map((leg) => `${leg.from}→${leg.to}`).join('；'),
-                      说明: '默认估算；外部到货仅在收货基地记录一次；未验证供方真实能力、交期及实际到货',
-                    })),
-                ),
-            },
-            '导出ODM默认计划到货',
-          ),
           table(
             'ODM供方SKU月度默认计划',
             ['月份', '供方口径', 'SKU', '收货基地', '默认计划到货量（件/月）', '默认计划到货吨数'],
@@ -585,20 +523,53 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
               ]),
           ),
         ),
+        h(
+          'button',
+          {
+            className: 'mps-download',
+            disabled: !active || !odmArrivals.length,
+            onClick: () =>
+              downloadCsv(
+                `${draft.month}-ODM默认计划到货.csv`,
+                [
+                  '月份',
+                  '供方口径',
+                  '产品编码',
+                  '收货基地',
+                  '需求基地',
+                  '默认计划到货量（件）',
+                  '默认计划到货吨数',
+                  '后续调拨路径',
+                  '说明',
+                ],
+                odmArrivals.map((row) => ({
+                  月份: row.month,
+                  供方口径: 'ODM默认供给，实际供方待确认',
+                  产品编码: row.code,
+                  收货基地: row.base,
+                  需求基地: row.demandBase,
+                  '默认计划到货量（件）': row.quantity,
+                  默认计划到货吨数: row.tons,
+                  后续调拨路径: row.path.map((leg) => `${leg.from}→${leg.to}`).join('；'),
+                  说明: '默认估算；外部到货仅在收货基地记录一次；未验证供方真实能力、交期及实际到货',
+                })),
+              ),
+          },
+          '导出ODM默认计划到货',
+        ),
       ),
       card(
         '调拨计划',
         h(
           react.Fragment,
           null,
-          h('p', { className: 'wf-note' }, '单位：件'),
           transferGroups.size
             ? [...transferGroups].map(([period, rows]) =>
                 h(
                   'details',
                   {
                     key: period,
-                    className: 'wf-plan-disclosure',
+                    className: 'wf-plan-disclosure mps-report-details',
                     open: Boolean(openTransfers[period]),
                     onToggle: (event) => {
                       if (event.target === event.currentTarget)
@@ -616,7 +587,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                             'details',
                             {
                               key,
-                              className: 'wf-plan-disclosure',
+                              className: 'wf-plan-disclosure mps-report-details',
                               open: Boolean(openTransfers[key]),
                               onToggle: (event) => {
                                 event.stopPropagation();
@@ -665,13 +636,16 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           react.Fragment,
           null,
           h(
-            'button',
-            {
-              disabled: !active,
-              onClick: () => {
-                const rows = report.annualIssues
-                  .filter((row) => !filters.base || row.base === filters.base)
-                  .map((row) => ({
+            'div',
+            { className: 'dc-card-head mps-report-heading' },
+            h('h3', null, `年度评估缺项 · ${numberText(annualIssues.length)} 项`),
+            h(
+              'button',
+              {
+                className: 'mps-download',
+                disabled: !active || !annualIssues.length,
+                onClick: () => {
+                  const rows = annualIssues.map((row) => ({
                     基地: row.base,
                     产品编码: row.code,
                     适用月份: [...new Set(row.months)].join('、'),
@@ -679,46 +653,43 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                     源表: row.sourceTable,
                     字段: row.fields,
                   }));
-                downloadCsv(
-                  `${draft.month}-年度评估缺项.csv`,
-                  ['基地', '产品编码', '适用月份', '待补原因', '源表', '字段'],
-                  rows,
-                );
+                  downloadCsv(
+                    `${draft.month}-年度评估缺项.csv`,
+                    ['基地', '产品编码', '适用月份', '待补原因', '源表', '字段'],
+                    rows,
+                  );
+                },
               },
-            },
-            '导出年度评估缺项',
+              '导出年度评估缺项',
+            ),
           ),
-          h(
-            'details',
-            disclosure('annualIssues'),
+          annualIssues.length > 0 &&
             h(
-              'summary',
-              null,
-              `年度评估缺项 ${report.annualIssues.length}项，按基地SKU与原因分列，预览前25项`,
+              ReportPage,
+              {
+                view,
+                stateKey: 'CapacityReport.annualIssuesPage',
+                label: '年度评估缺项',
+                rows: annualIssues,
+              },
+              (rows) =>
+                table(
+                  '年度评估缺项',
+                  ['基地', 'SKU', '适用月份', '待补原因', '源表 / 字段'],
+                  rows.map((row) => [
+                    row.base,
+                    row.code,
+                    [...new Set(row.months)].join('、'),
+                    row.reason,
+                    `${row.sourceTable} / ${row.fields}`,
+                  ]),
+                ),
             ),
-            table(
-              '年度评估缺项',
-              ['基地', 'SKU', '适用月份', '待补原因', '源表 / 字段'],
-              report.annualIssues
-                .slice(0, 25)
-                .map((row) => [
-                  row.base,
-                  row.code,
-                  [...new Set(row.months)].join('、'),
-                  row.reason,
-                  `${row.sourceTable} / ${row.fields}`,
-                ]),
-            ),
-          ),
           report.annualSource.unmappedCount
             ? h(
                 'details',
                 disclosure('unmappedAnnual'),
-                h(
-                  'summary',
-                  null,
-                  `年度来源维度待核对 ${report.annualSource.unmappedCount}行，预览前25行`,
-                ),
+                h('summary', null, `年度来源维度待核对 ${report.annualSource.unmappedCount}行`),
                 table(
                   '年度来源维度待核对',
                   ['月份', 'SKU', '待补字段'],
@@ -789,7 +760,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         h(
           react.Fragment,
           null,
-          h('p', { className: 'wf-note' }, '按物理隧道去重。隧道吨位为设备规格，不作为日产能。'),
           report.bases
             .filter((base) => !filters.base || filters.base === base)
             .map((base) => {
@@ -798,7 +768,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                 'details',
                 {
                   key: base,
-                  className: 'wf-plan-disclosure',
+                  className: 'wf-plan-disclosure mps-report-details',
                   open: Boolean(openLines[base]),
                   onToggle: (event) => {
                     if (event.target === event.currentTarget)
@@ -844,30 +814,52 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           h(
             react.Fragment,
             null,
+            formingSchedules.length
+              ? table(
+                  '成型机实际占用',
+                  ['月份', '基地', '成型机', '月产能（吨）', '实际占用（吨）', '负荷率', '缺项'],
+                  formingSchedules.map((row) => [
+                    row.month,
+                    row.base,
+                    row.name,
+                    numberText(row.capacity),
+                    numberText(row.scheduledTons),
+                    row.load === null ? '待补' : `${(row.load * 100).toFixed(2)}%`,
+                    row.missing.join('；') || '—',
+                  ]),
+                )
+              : h(
+                  'p',
+                  { role: 'status' },
+                  '当前筛选范围没有有效的已配置成型机占用记录，请核对已有配置及筛选范围。',
+                ),
+          ),
+          h(
+            'div',
+            { className: 'mps-report-actions' },
             h(
-              'p',
-              { className: 'wf-note' },
-              '按基地、SKU、月份的批准分配比例占用成型机。相同产量同时占用隧道和成型机；缺台账或有效分配的记录见分类问题清单。',
+              CalculationHelp,
+              { title: '成型机占用 · 口径说明' },
+              h('p', null, '按基地、SKU、月份的批准比例分配。同一产量同时占用隧道和成型机。'),
             ),
             h(
               'button',
               {
-                disabled: !active,
+                className: 'mps-download',
+                disabled: !active || !formingSchedules.length,
                 onClick: () => {
-                  const rows = plan.resourceSchedules
-                    .filter((row) => row.kind === 'forming')
-                    .map((row) => ({
-                      月份: row.month,
-                      基地: row.base,
-                      资源编号: row.resourceId,
-                      成型机: row.name,
-                      日产吨数: row.dailyTons,
-                      生产天数: row.days,
-                      月产能吨数: row.capacity,
-                      实际占用吨数: row.scheduledTons,
-                      负荷率: row.load,
-                      缺项: row.missing.join('；'),
-                    }));
+                  const rows = formingSchedules.map((row) => ({
+                    月份: row.month,
+                    基地: row.base,
+                    资源编号: row.resourceId,
+                    成型机: row.name,
+                    日产吨数: row.dailyTons,
+                    生产天数: row.days,
+                    月产能吨数: row.capacity,
+                    实际占用吨数: row.scheduledTons,
+                    负荷率: row.load,
+                    缺项: row.missing.join('；'),
+                  }));
                   downloadCsv(
                     `${draft.month}-成型机实际占用.csv`,
                     [
@@ -888,25 +880,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
               },
               '导出成型机实际占用',
             ),
-            formingSchedules.length
-              ? table(
-                  '成型机实际占用',
-                  ['月份', '基地', '成型机', '月产能（吨）', '实际占用（吨）', '负荷率', '缺项'],
-                  formingSchedules.map((row) => [
-                    row.month,
-                    row.base,
-                    row.name,
-                    numberText(row.capacity),
-                    numberText(row.scheduledTons),
-                    row.load === null ? '待补' : `${(row.load * 100).toFixed(2)}%`,
-                    row.missing.join('；') || '配置有效',
-                  ]),
-                )
-              : h(
-                  'p',
-                  { role: 'status' },
-                  '当前筛选范围没有有效的已配置成型机占用记录，请核对已有配置及筛选范围。',
-                ),
           ),
         ),
       card(
@@ -914,11 +887,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         h(
           react.Fragment,
           null,
-          h(
-            'p',
-            { className: 'wf-note' },
-            '触发口径＝归属需求超过月产能上限。吨数缺口与SKU件数未满足量分开列出。无有效产能或需求不完整的行保留为待评估，不伪造缺口。',
-          ),
           gaps.length
             ? table(
                 '月产能缺口明细',
@@ -943,16 +911,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                   '隧道；处置类型待人工确认',
                 ]),
               )
-            : h(
-                'p',
-                { className: 'wf-note' },
-                '当前完整口径内暂无超产缺口；需求或折吨不完整的单品见“需求与折吨缺项”。',
-              ),
-          h(
-            'p',
-            { className: 'wf-note' },
-            '处置由人工评估。需提前建库存、当月增加产能、吞吐能力瓶颈三类原因须确认后标注，系统不代做处置决定。',
-          ),
+            : h('p', { className: 'wf-note' }, '已评估范围暂无超产缺口'),
         ),
       ),
       rulesOpen

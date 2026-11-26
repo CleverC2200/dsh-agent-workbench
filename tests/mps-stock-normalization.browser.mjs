@@ -118,7 +118,7 @@ test('三项确认无数量才预估0，后续入库和调拨形成115结存，�
       .getByRole('table', { name: '本月预估发货明细' })
       .getByRole('button', { name: '郑州 整月预估发货 计算过程', exact: true }),
   ).toHaveText('0');
-  const detail = await download(page, '下载明细');
+  const detail = await download(page, '下载发货与结存');
   assert.equal(detail.find((row) => row.产品编码 === 'ZERO').预计月末结存, 115);
   assert.match(detail.find((row) => row.产品编码 === 'MISSING').预估待补原因, /近30天/);
 });
@@ -138,7 +138,7 @@ test('负期初和负预测结存逐明细归0，正库存不抵消，页面及�
   await expect(page.getByRole('table', { name: '发货与库存异常报告' })).toContainText('-20');
   await expect(page.getByRole('table', { name: '发货与库存异常报告' })).toContainText('-5');
   await page.getByLabel('搜索发货单品').fill('NEG');
-  const detail = await download(page, '下载明细');
+  const detail = await download(page, '下载发货与结存');
   assert.equal(detail.length, 1);
   assert.equal(detail[0].原始月初库存, -20);
   assert.equal(detail[0].原始预计月末结存, -5);
@@ -161,7 +161,7 @@ test('来源历史不完整或冲突不能把零数量认定为真实无发货',
   ]);
   const rows = await page.evaluate(() => window.snapshot);
   assert.ok(rows.every((row) => row.fin === null && row.end === null));
-  const detail = await download(page, '下载明细');
+  const detail = await download(page, '下载发货与结存');
   assert.match(detail.find((row) => row.产品编码 === 'INCOMPLETE').预估待补原因, /实际21天，缺1天/);
   assert.match(detail.find((row) => row.产品编码 === 'CONFLICT').预估待补原因, /来源日期重复1条/);
 });

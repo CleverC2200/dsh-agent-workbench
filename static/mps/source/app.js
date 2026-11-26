@@ -1,7 +1,6 @@
 import { createDemandConfirmation, downloadCsv } from './demand-confirmation.js';
 import { createRelations } from './relations-view.js';
-import { mpsView, useMpsPart, useMpsNavigation, askMpsQuestion } from './context.js';
-import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
+import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
 import { usePageViewField } from '../../../business/shared/view-state.js';
 
 const mpsSteps = [
@@ -13,7 +12,7 @@ const mpsSteps = [
   ['capacity', '产能评估与缺口'],
   ['report', '产销存报告'],
 ].map(([key, label], index) => ({ key, label, step: String(index + 1) }));
-const DemandConfirmation = createDemandConfirmation(y, useMpsPart, mpsView);
+const DemandConfirmation = createDemandConfirmation(y, useMpsPart, mpsView, Ke, Mn.createPortal);
 const Relations = createRelations(y, useMpsPart, { downloadCsv });
 const selectedStep = () => {
   const key = window.location.hash.replace(/^#\/?/, '').split('/')[0];
@@ -29,7 +28,38 @@ function Mps() {
     (value) => (mpsSteps.some((item) => item.key === value) ? value : 'check'),
   );
   const bodyRef = y.useRef(null);
-  const [assistantDraft, setAssistantDraft] = usePageViewField(y, mpsView, 'assistantDraft', '');
+  const stepListRef = y.useRef(null);
+  y.useLayoutEffect(() => {
+    const list = stepListRef.current;
+    if (!list) return;
+    const revealCurrent = () => {
+      const current = list.querySelector('[aria-current="step"]');
+      if (!current) return;
+      const container = list.getBoundingClientRect();
+      const item = current.getBoundingClientRect();
+      list.scrollLeft +=
+        Math.min(0, item.left - container.left) + Math.max(0, item.right - container.right);
+    };
+    revealCurrent();
+    const observer = new ResizeObserver(revealCurrent);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [step]);
+  y.useEffect(() => {
+    const receiveLayout = (event) => {
+      if (event.source === window.parent && event.data?.protocol === 'gea-toolbar-layout')
+        document.documentElement.toggleAttribute(
+          'data-shared-workbench-toolbar',
+          event.data.shared === true,
+        );
+    };
+    window.addEventListener('message', receiveLayout);
+    window.parent.postMessage({ protocol: 'gea-toolbar-layout-ready' }, '*');
+    return () => {
+      window.removeEventListener('message', receiveLayout);
+      window.parent.postMessage({ protocol: 'gea-toolbar-layout-gone' }, '*');
+    };
+  }, []);
   const [scope, setScope] = y.useState(null);
   const scrollPositions = y.useRef(new Map());
   const scrollKey = JSON.stringify([scope?.id, scope?.month, scope?.generation, step]);
@@ -44,7 +74,6 @@ function Mps() {
   }, [scrollKey]);
   const [adjusting, setAdjusting] = y.useState(false);
   const [relations, setRelations] = y.useState(null);
-  const actions = useAuthorQuote(y, askMpsQuestion);
   const select = y.useCallback(
     (key) => {
       if (adjusting || !mpsSteps.some((item) => item.key === key)) return;
@@ -64,19 +93,6 @@ function Mps() {
     window.addEventListener('hashchange', changed);
     return () => window.removeEventListener('hashchange', changed);
   }, [setStep, adjusting, step]);
-  const assistant = y.createElement(AuthorQuestions, {
-    react: y,
-    jsx: c,
-    Button: Ke,
-    questions: [
-      { label: '核对当前数据', text: '核对当前步骤的数据来源、期间与缺项。' },
-      { label: '解释计算过程', text: '解释当前步骤已有数字的公式、代入和结果。' },
-    ],
-    draft: assistantDraft,
-    onClearDraft: () => setAssistantDraft(''),
-    actions,
-    expanded: true,
-  });
   useMpsNavigation(
     y,
     {
@@ -95,11 +111,11 @@ function Mps() {
       'main',
       { className: 'ap-board' },
       y.createElement(
-        'div',
-        { className: 'ap-board-head' },
+        'nav',
+        { className: 'ap-board-head', 'aria-label': '月主计划评估步骤' },
         y.createElement(
           'div',
-          { className: 'ap-page-tabs' },
+          { className: 'ap-page-tabs', ref: stepListRef },
           mpsSteps.map((item) =>
             y.createElement(
               Ke,
@@ -107,6 +123,7 @@ function Mps() {
                 key: item.key,
                 className: 'ap-page-tab',
                 'data-active': step === item.key,
+                'aria-current': step === item.key ? 'step' : undefined,
                 disabled: adjusting && step !== item.key,
                 onClick: () => select(item.key),
               },
@@ -117,6 +134,20 @@ function Mps() {
                 item.label,
               ),
             ),
+          ),
+        ),
+        y.createElement(
+          'select',
+          {
+            className: 'ap-step-jump',
+            'aria-label': '跳到评估步骤',
+            value: '',
+            disabled: adjusting,
+            onChange: (event) => select(event.target.value),
+          },
+          y.createElement('option', { value: '', disabled: true }, '全部步骤'),
+          ...mpsSteps.map(({ key, label, step: number }) =>
+            y.createElement('option', { key, value: key }, `${number}. ${label}`),
           ),
         ),
       ),
@@ -140,7 +171,6 @@ function Mps() {
             active: step === 'masterdata',
             enabled: !['check', 'ship'].includes(step) || Boolean(relations?.sources),
           }),
-          assistant,
         }),
       ),
     ),

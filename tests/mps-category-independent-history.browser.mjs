@@ -210,8 +210,8 @@ for (const scenario of [
         .click();
       const dialog = frame.getByRole('dialog', { name: '三年同比 · 源值核对', exact: true });
       const pending = page.waitForEvent('download');
-      await dialog.getByRole('button', { name: '下载同比分子分母', exact: true }).click();
-      const text = await mpsDownloadText(await (await pending).path());
+      await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
+      const text = await mpsDownloadText(await (await pending).path(), '分子分母');
       const workbook = XLSX.read(text, { type: 'string', raw: true });
       const records = XLSX.utils
         .sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' })
@@ -226,7 +226,7 @@ for (const scenario of [
         ),
         text,
       );
-      await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+      await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
     }
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
     await frame.getByLabel('数据截止日', { exact: true }).fill('2026-11-22');

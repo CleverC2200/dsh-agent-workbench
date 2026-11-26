@@ -75,7 +75,7 @@ print(json.dumps([dict(r) for r in db.execute(x['sql'],x['parameters'])]))`,
 }
 async function download(page, frame) {
   const pending = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载明细', exact: true }).click();
+  await frame.getByRole('button', { name: '下载发货与结存', exact: true }).click();
   const file = await pending;
   if (process.env.MPS03_EVIDENCE_DIR)
     await file.saveAs(`${process.env.MPS03_EVIDENCE_DIR}/shipment.xlsx`);
@@ -172,7 +172,7 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
-  await expect(frame.getByRole('button', { name: '下载明细', exact: true })).toBeEnabled();
+  await expect(frame.getByRole('button', { name: '下载发货与结存', exact: true })).toBeEnabled();
   const rows = await download(page, frame);
   const pace = rows.find((row) => row.产品编码 === 'PACE');
   assert.equal(pace.近三天日均发货量, '10');

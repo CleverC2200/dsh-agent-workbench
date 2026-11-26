@@ -1,3 +1,4 @@
+import { renderTablePagination } from './report-page.js';
 import { matchesCategories } from './category-filter.js';
 import { ready } from '../../../business/shared/channel.js';
 import { hasMpsSource } from './master-data.js';
@@ -127,6 +128,7 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
             footer: h(
               'button',
               {
+                className: 'mps-download',
                 disabled: !rows.length,
                 onClick: () => downloadCsv(`销售提报占比-${draft.month}.csv`, columns, rows),
               },
@@ -154,20 +156,12 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
           ),
           table(columns, selected.slice(pageIndex * 25, (pageIndex + 1) * 25).map(display)),
           !selected.length && h('p', {}, '当前月份和维度没有源记录。'),
-          h(
-            'div',
-            { className: 'dc-pagination' },
-            h('span', {}, `共${selected.length}条，第${pageIndex + 1}页`),
-            h('button', { disabled: !pageIndex, onClick: () => setPage(pageIndex - 1) }, '上一页'),
-            h(
-              'button',
-              {
-                disabled: (pageIndex + 1) * 25 >= selected.length,
-                onClick: () => setPage(pageIndex + 1),
-              },
-              '下一页',
-            ),
-          ),
+          renderTablePagination(h, {
+            label: '销售提报率',
+            page: pageIndex,
+            total: selected.length,
+            onPageChange: setPage,
+          }),
         ),
     );
   };

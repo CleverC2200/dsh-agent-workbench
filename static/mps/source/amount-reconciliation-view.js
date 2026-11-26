@@ -44,17 +44,7 @@ export function createAmountReconciliation(react, { downloadCsv }) {
       h(
         react.Fragment,
         null,
-        h(
-          'p',
-          { className: 'wf-note' },
-          `${amounts.month} · 单位：元。差额=生成需求金额−最终计划金额；逐SKU以有效需求乘未税到岸单价，汇总后保留两位。`,
-        ),
-        !amounts.poolComplete &&
-          h(
-            'p',
-            { className: 'wf-note' },
-            '生成金额仅覆盖当前产品池，全国覆盖尚未证明。源金额未匹配到需求时保留源金额并标明缺项。',
-          ),
+        h('p', { className: 'wf-note' }, `${amounts.month} · 单位：元。`),
         amounts.sourceError &&
           h('p', { role: 'status', className: 'wf-note' }, amounts.sourceError),
         amounts.excluded.count > 0 &&
@@ -78,24 +68,20 @@ export function createAmountReconciliation(react, { downloadCsv }) {
         ),
       ),
       h(
-        'div',
-        { className: 'wf-card-actions' },
-        h('span', { className: 'dc-card-note' }, '缺项时保留已知小计，差额待补'),
-        h(
-          'button',
-          {
-            onClick: () =>
-              downloadCsv(
-                `${amounts.month}-需求金额对比.csv`,
-                [
-                  ...columns,
-                  ...Object.keys(exported[0]).filter((column) => !columns.includes(column)),
-                ],
-                exported,
-              ),
-          },
-          '下载金额对比',
-        ),
+        'button',
+        {
+          className: 'mps-download',
+          onClick: () =>
+            downloadCsv(
+              `${amounts.month}-需求金额对比.csv`,
+              [
+                ...columns,
+                ...Object.keys(exported[0]).filter((column) => !columns.includes(column)),
+              ],
+              exported,
+            ),
+        },
+        '下载金额对比',
       ),
     );
   };

@@ -18,6 +18,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         import {buildMpsWorkflow} from './static/mps/source/workflow-inputs.js';
         import {downloadCsv} from './static/mps/source/demand-confirmation.js';
         import {encodeLocalDrafts,decodeLocalDrafts} from './static/mps/source/local-draft.js';
+        import {createStepViewState} from './static/mps/source/step-view-state.js';
         import {workflowPerformanceInput} from './tests/helpers/mps-workflow-fixture.mjs';
         const root=createRoot(document.getElementById('root'));
         window.runCapacity=(size=2,restore=false,scenario='complete')=>{
@@ -40,9 +41,10 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
         window.result=result;window.downloads=[];
         const View=createEvaluationOverview(React,{Dialog:()=>null,downloadCsv:(name,columns,rows)=>{window.downloads.push({name,columns,rows});return downloadCsv(name,columns,rows)}});
         const h=React.createElement;
-        const card=(title,body)=>h('section',{className:'dc-card','aria-label':title},h('div',{className:'dc-card-head'},h('h2',null,title)),body);
+        const card=(title,body,actions)=>h('section',{className:'dc-card','aria-label':title},h('div',{className:'dc-card-head'},h('h2',null,title),actions),body);
         const table=(name,columns,rows)=>h('div',{className:'dc-table-scroll wf-table-scroll'},h('table',{'aria-label':name},h('thead',null,h('tr',null,...columns.map((c,i)=>h('th',{key:i,scope:'col'},c)))),h('tbody',null,...rows.map((r,i)=>h('tr',{key:i},...r.map((v,j)=>h('td',{key:j},v?.content??v)))))));
-        window.showStep=(step)=>root.render(h(View,{step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters:{month:'2026-12'},table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}}));
+        const view=createStepViewState();
+        window.showStep=(step,filters={month:'2026-12'})=>root.render(h(View,{view,step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters,table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}}));
         window.showStep('capacity');};window.runCapacity(2,localStorage.getItem('capacityDraft')!==null);`,
     },
     plugins: [await mpsComputePlugin()],
@@ -117,27 +119,31 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
     100,
   );
   assert.ok(saved.every((row) => row.范围月产能吨数 === 100));
-  let exported = await page.evaluate(() => window.downloads.at(-1));
-  assert.equal(exported.rows.length, 2);
-  assert.equal(
-    exported.rows.reduce((sum, row) => sum + row.关联需求吨数, 0),
-    100,
-  );
-  assert.ok(Math.abs(exported.rows.reduce((sum, row) => sum + row.实际占用吨数, 0) - 100) < 1e-6);
-  assert.ok(exported.rows.every((row) => row.范围月产能吨数 === 100));
-  assert.ok(exported.rows.every((row) => row.隧道利用率 === 0.5));
+  assert.ok(Math.abs(saved.reduce((sum, row) => sum + row.实际占用吨数, 0) - 100) < 1e-6);
+  assert.ok(saved.every((row) => row.隧道利用率 === 0.5));
+  assert.deepEqual(workbook.SheetNames.slice(0, 2), ['产品占用', '设备范围']);
+  const downloadSheet = async (label, name) => {
+    const pending = page.waitForEvent('download');
+    await page.getByRole('button', { name: label, exact: true }).click();
+    const file = await pending;
+    const book = XLSX.read(await readFile(await file.path()), { type: 'buffer' });
+    assert.ok(book.Sheets[name]);
+    return { rows: XLSX.utils.sheet_to_json(book.Sheets[name], { defval: null }) };
+  };
+  const reportDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出产能评估报告', exact: true }).click();
+  await reportDownload;
   const capacityExport = await page.evaluate(() => window.downloads.at(-1));
   assert.ok(capacityExport.columns.includes('隧道利用率'));
   assert.ok(!capacityExport.columns.includes('负荷率'));
   assert.equal(capacityExport.rows.find((row) => row.月份 === '2026-12').隧道利用率, 1);
+  let exported;
   await page.getByLabel('设备基地', { exact: true }).selectOption('甲');
   await page.getByLabel('设备车间', { exact: true }).selectOption(JSON.stringify('一车间'));
   await page.getByLabel('设备产线', { exact: true }).selectOption(JSON.stringify('共用产线'));
   await page.getByLabel('设备隧道', { exact: true }).selectOption('R');
   await expect(page.getByRole('table', { name: '设备范围明细', exact: true })).toContainText('T1');
-  await page.getByRole('button', { name: '下载设备范围与产品占用', exact: true }).click();
-  exported = await page.evaluate(() => window.downloads.at(-1));
+  exported = await downloadSheet('下载设备范围与产品占用', '产品占用');
   assert.ok(exported.rows.every((row) => row.范围月产能吨数 === 50));
   assert.equal(
     exported.rows.reduce((sum, row) => sum + row.关联需求吨数, 0),
@@ -151,11 +157,16 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
     '来源未提供独立产线',
   );
   await page.evaluate(() => window.showStep('report'));
+  const deviceDetails = page.locator('summary').filter({ hasText: '设备范围与产品占用' });
+  await expect(deviceDetails).toBeVisible();
+  await expect(page.getByRole('heading', { name: '设备范围与产品占用', exact: true })).toHaveCount(
+    0,
+  );
+  await deviceDetails.click();
   await expect(
     page.getByRole('heading', { name: '设备范围与产品占用', exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: '下载设备范围明细', exact: true }).click();
-  exported = await page.evaluate(() => window.downloads.at(-1));
+  exported = await downloadSheet('下载设备范围与产品占用', '设备范围');
   assert.equal(exported.rows.length, 1);
   assert.equal(exported.rows[0].隧道号, 'T2');
   assert.equal(exported.rows[0].关联需求吨数, 100);
@@ -172,13 +183,11 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   ).toBeVisible();
   await page.getByRole('button', { name: '下一页产品', exact: true }).click({ timeout: 1000 });
   await expect(productTable.locator('tbody tr')).toHaveCount(1);
-  await page.getByRole('button', { name: '下载设备范围与产品占用', exact: true }).click();
-  exported = await page.evaluate(() => window.downloads.at(-1));
+  exported = await downloadSheet('下载设备范围与产品占用', '产品占用');
   assert.equal(exported.rows.length, 26);
   await page.evaluate(() => window.runCapacity(2, false, 'missing'));
   await expect(summary).toContainText('尚未形成排产分配');
-  await page.getByRole('button', { name: '下载设备范围与产品占用', exact: true }).click();
-  exported = await page.evaluate(() => window.downloads.at(-1));
+  exported = await downloadSheet('下载设备范围与产品占用', '产品占用');
   assert.ok(exported.rows.every((row) => row.排产状态.includes('尚未形成排产分配')));
   assert.ok(exported.rows.every((row) => row.实际占用吨数 === 0));
   await page.evaluate(() => window.runCapacity(2, false, 'zero'));
@@ -186,19 +195,27 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   await expect(summary).toContainText('0.00%');
   await page.evaluate(() => window.runCapacity(2, false, 'demand'));
   await expect(summary).toContainText('项待补');
-  await page.getByRole('button', { name: '下载设备范围与产品占用', exact: true }).click();
-  exported = await page.evaluate(() => window.downloads.at(-1));
-  assert.ok(exported.rows.every((row) => row.隧道利用率 === null));
-  assert.ok(exported.rows.every((row) => row.关联需求吨数 === null));
+  exported = await downloadSheet('下载设备范围与产品占用', '产品占用');
+  assert.ok(exported.rows.every((row) => row.隧道利用率 === '' || row.隧道利用率 === null));
+  assert.ok(exported.rows.every((row) => row.关联需求吨数 === '' || row.关联需求吨数 === null));
   assert.ok(exported.rows.every((row) => row.范围月产能吨数 === 100));
   assert.ok(exported.rows.every((row) => row.待补需求项数 === 2));
+  await page.evaluate(() => window.showStep('capacity', { month: '2026-12', base: '无符合基地' }));
+  for (const label of ['下载设备范围与产品占用', '导出分类问题清单', '导出年度评估缺项']) {
+    await expect(page.getByRole('button', { name: label, exact: true })).toBeDisabled();
+  }
+  for (const label of ['下载设备范围与产品占用', '导出分类问题清单', '导出年度评估缺项']) {
+    await expect(
+      page.locator('.dc-card-head').getByRole('button', { name: label, exact: true }),
+    ).toBeVisible();
+  }
+
   await page.evaluate(() => {
     window.runCapacity(2, false, 'movement');
   });
   const problems = page.getByRole('region', { name: '问题分类与补充清单', exact: true });
   await expect(problems).toContainText('既有入库或调拨计划缺项');
-  await page.getByRole('button', { name: '导出求解结果', exact: true }).click();
-  exported = await page.evaluate(() => window.downloads.at(-1));
+  exported = await downloadSheet('导出求解结果', '求解结果');
   const blocked = exported.rows.find((row) => row.产品编码 === '0');
   assert.match(blocked.问题分类, /既有入库或调拨计划缺项/);
   assert.match(blocked.异常说明, /缺既有生产入库、既有调入/);

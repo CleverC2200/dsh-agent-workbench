@@ -37,6 +37,12 @@ export function createProcessedDemand(
   { downloadCsv, downloadAmounts, Upload, Dialog, parseCsv },
 ) {
   const h = react.createElement;
+  const periodHeader = (column) => {
+    const parts = /^((?:M\+\d+ )?\d{4}-\d{2})( .+)$/.exec(column);
+    return parts
+      ? h(react.Fragment, null, h('span', { className: 'wf-column-period' }, parts[1]), parts[2])
+      : column;
+  };
   const { Field } = createBatchEdit(react);
   const DemandAdjustmentUpload = createDemandAdjustmentUpload(react, {
     Upload,
@@ -494,13 +500,6 @@ export function createProcessedDemand(
                   h('span', null, name),
                 )
               : h('span', { className: 'wf-demand-leaf' }, name),
-            entry.kind === 'base-sku' && processRow?.historyCode
-              ? h(
-                  'small',
-                  { className: 'wf-note' },
-                  `历史合计 · 自身＋替换品 ${processRow.historyCode}，折算倍率${processRow.historyFactor === null ? '待补' : new Intl.NumberFormat('zh-CN', { style: 'percent', maximumSignificantDigits: 4 }).format(processRow.historyFactor ?? 1)}`,
-                )
-              : null,
             entry.kind === 'base-sku' &&
               processRow &&
               h(
@@ -781,7 +780,9 @@ export function createProcessedDemand(
           h(
             'tr',
             null,
-            detailColumns.map((column) => h('th', { key: column, scope: 'col' }, column)),
+            detailColumns.map((column) =>
+              h('th', { key: column, scope: 'col' }, periodHeader(column)),
+            ),
           ),
         ),
         h('tbody', null, detailRows),
@@ -836,12 +837,12 @@ export function createProcessedDemand(
       null,
       card(
         '大类需求总表',
-        h(react.Fragment, null, table('大类需求总表', summaryColumns, summaryRows)),
+        table('大类需求总表', summaryColumns.map(periodHeader), summaryRows),
         h(
           'div',
           { className: 'wf-card-actions' },
           h('span', { className: 'dc-card-note' }, '单位：件'),
-          h('button', { onClick: exportSummary }, '下载大类需求总表'),
+          h('button', { className: 'mps-download', onClick: exportSummary }, '下载大类需求总表'),
         ),
       ),
       h(DemandDiagnostics, { view, draft, result, rows, filters, table }),
@@ -853,8 +854,7 @@ export function createProcessedDemand(
           null,
           h(DemandAdjustmentUpload, { draft, result, batch, table, apply: applyBatch }),
           detailTable,
-          !rows.length &&
-            h('p', { className: 'wf-note' }, '当前筛选暂无基地SKU输入，展开来源诊断查看缺项。'),
+          !rows.length && h('p', { className: 'wf-note' }, '暂无匹配的基地 SKU'),
         ),
         h(
           'div',
@@ -877,7 +877,7 @@ export function createProcessedDemand(
             h('option', { value: 'base' }, '按基地查看'),
             h('option', { value: 'national' }, '全国汇总查看'),
           ),
-          h('button', { onClick: exportScope }, '下载当前范围需求'),
+          h('button', { className: 'mps-download', onClick: exportScope }, '下载当前范围需求'),
         ),
       ),
       h(UpperAdjustmentConflicts, { draft, update }),
@@ -886,7 +886,7 @@ export function createProcessedDemand(
         h(
           'details',
           {
-            className: 'wf-disclosure',
+            className: 'wf-disclosure mps-report-details',
             open: fixedQuantitiesOpen,
             onToggle: (event) => {
               if (event.target === event.currentTarget)

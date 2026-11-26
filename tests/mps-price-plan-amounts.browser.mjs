@@ -79,18 +79,19 @@ test('重复日报快照按SKU展示源单价并下载，缺价留空且不改�
   await expect(section.locator('tbody tr')).toHaveCount(2);
   await expect(section.locator('tbody tr').first()).toContainText('12.345600');
   const download = page.waitForEvent('download');
-  await section.getByRole('button', { name: '下载', exact: true }).click();
-  const productPath = await (await download).path();
+  await section.getByRole('button', { name: '下载产品明细', exact: true }).click();
+  const file = await download;
+  assert.equal(file.suggestedFilename(), '产品明细.xlsx');
+  const productPath = await file.path();
   const csv = await mpsDownloadText(productPath);
   assert.match(csv, /未税到岸单价/);
   assert.match(csv, /12\.345600/);
   assert(!csv.includes('产品B,汤圆,,G,组甲,,,0'));
   await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
-    name: '产品关系.xlsx',
+    name: file.suggestedFilename(),
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     buffer: await readFile(productPath),
   });
-  await expect(section).toContainText('产品关系.xlsx');
   await expect(section).toContainText('2 个产品');
   await expect(section.getByRole('alert')).toHaveCount(0);
 });
@@ -150,6 +151,14 @@ test('提报金额独立汇总全部分页，产品关联不放大，预览和�
   const section = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(section).toContainText('月初计划总金额：9007199254740994.01元');
   await expect(section).toContainText('最终计划总金额：121.45元');
+  const help = section.locator('.dc-calculation-help-panel');
+  await expect(help).toBeHidden();
+  await expect(section.locator('.dc-source-body')).not.toContainText('金额来源 ai_db');
+  await section.getByRole('button', { name: '口径说明', exact: true }).press('Enter');
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('201条');
+  await section.getByRole('button', { name: '口径说明', exact: true }).press('Escape');
+  await expect(help).toBeHidden();
   await expect
     .poll(
       () => contexts.at(-1)?.parts?.check?.sourceSummaries?.report?.amounts?.initialPlan?.amount,
@@ -195,7 +204,7 @@ test('金额来源未配置时保留提报数量，明确待补且不将缺项�
   const section = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(section).toContainText('金额来源尚未配置');
   await expect(section).toContainText('月初计划总金额：待补');
-  await section.getByText('口径与统计说明', { exact: true }).click();
+  await section.getByRole('button', { name: '口径说明', exact: true }).click();
   await expect(section).toContainText('数量合计5件');
 });
 
@@ -239,6 +248,6 @@ test('池内金额缺项显示已知小计，池外缺基地金额排除，刷�
   await expect
     .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.report?.amounts?.finalPlan?.amount)
     .toBe(null);
-  await section.getByText('口径与统计说明', { exact: true }).click();
+  await section.getByRole('button', { name: '口径说明', exact: true }).click();
   await expect(section).toContainText('数量合计5件');
 });

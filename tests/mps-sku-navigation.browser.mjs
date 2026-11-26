@@ -55,8 +55,7 @@ async function skuPage(t, history = false) {
       '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,G1,物料组甲,,\n华东,A,产品甲,汤圆,系列甲,G1,物料组甲,,\n郑州,B,产品乙,水饺,系列乙,G2,物料组乙,,',
     ),
   });
-  const selected = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
-  const month = selected.match(/\d{4}-\d{2}/)[0];
+  const month = await frame.getByLabel('评估月份选择').inputValue();
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '提报.csv',
     mimeType: 'text/csv',
@@ -173,10 +172,10 @@ test('基地SKU修正后父级读取有效数量，全国汇总与明细下载�
   await base.press('Enter');
   await table.getByRole('button', { name: '郑州 大类 · 汤圆', exact: true }).press('Enter');
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
-  await beginAdjustment(view);
+  await beginAdjustment(frame);
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('50');
-  await selectAdjustmentReason(view, '基地SKU数量复核');
-  await saveAdjustment(view);
+  await selectAdjustmentReason(frame, '基地SKU数量复核');
+  await saveAdjustment(frame);
   const demandCell = async (name, expected) => {
     const row = table
       .getByRole('row')

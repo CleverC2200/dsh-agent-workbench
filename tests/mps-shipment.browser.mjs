@@ -1,3 +1,4 @@
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 import { expandShipmentBase } from './helpers/mps-shipment.mjs';
 import { beginAdjustment, saveAdjustment } from './helpers/mps-edit.mjs';
 import test from 'node:test';
@@ -12,10 +13,10 @@ import { authorPage } from './helpers/author-page.mjs';
 
 const columns =
   '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库,近30天日均发货';
-async function shipment(t, month = '2026-10') {
+async function shipment(t, month = '2026-10', width = 1200) {
   const page = await authorPage(t);
   await page.clock.setFixedTime(new Date(`${month}-15T12:00:00+08:00`));
-  await page.evaluate(() => window.openAuthor('mps', 1200));
+  await page.evaluate((width) => window.openAuthor('mps', width), width);
   const frame = page.frameLocator('iframe');
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
@@ -114,6 +115,13 @@ test('MPS shipment totals corrected SKU forecasts and explains the SKU calculati
     '2026-09,郑州,B,产品B,汤圆,系列,组,110,0,0,0,10,20,8',
   ]);
   await expect(frame.getByLabel('数据截止日')).toHaveValue('2026-09-22');
+  const help = frame.locator('[popover][aria-label="本月预估发货口径"]');
+  await expect(help).toBeHidden();
+  await frame.getByRole('button', { name: '口径说明', exact: true }).click();
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('2026-09调拨计划取库存日报截止日前最新适用快照');
+  await frame.getByRole('heading', { name: '本月预估发货', level: 3, exact: true }).click();
+  await expect(help).toBeHidden();
   await expect(
     table.getByRole('button', { name: '全国合计 整月预估发货 计算过程', exact: true }),
   ).toHaveText('450');
@@ -138,12 +146,10 @@ async function edit(table, label, value) {
   await input.fill(String(value));
   await saveAdjustment(frame);
 }
-async function exported(page, frame, name = '下载明细') {
+async function exported(page, frame, name = '下载发货与结存', sheet) {
   const waiting = page.waitForEvent('download');
   await frame.getByRole('button', { name, exact: true }).press('Enter');
-  const chunks = [];
-  for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
-  return Buffer.concat(chunks).toString('utf8');
+  return mpsDownloadText(await (await waiting).path(), sheet);
 }
 test('MPS shipment summarizes available values and marks missing SKUs without filling unknown inputs with zero', async (t) => {
   const { page, frame, table } = await shipment(t);
@@ -190,6 +196,43 @@ test('MPS shipment summarizes available values and marks missing SKUs without fi
   assert.match(csv, /缺失输入/);
   assert.match(csv, /已备、月初库存/);
 });
+test('MPS narrow shipment jumps from the anomaly report to the matching base and SKU', async (t) => {
+  const { page, frame, table } = await shipment(t, '2026-10', 640);
+  await upload(frame, [
+    '2026-09,郑州,A,完整产品,汤圆,系列,组,220,10,10,10,100,200,80',
+    '2026-09,郑州,B,缺项产品,汤圆,系列,组,110,,10,10,,20,8',
+  ]);
+  const jump = frame.getByRole('combobox', { name: '跳到评估步骤' });
+  await expect(jump.locator('option')).toHaveCount(8);
+  await jump.selectOption('process');
+  await expect(frame.locator('[aria-current="step"]')).toContainText('需求加工与收敛');
+  await jump.selectOption('ship');
+  await expect(frame.locator('[aria-current="step"]')).toContainText('本月预估发货');
+  if (process.env.MPS_SHIPMENT_SCREENSHOT) {
+    await frame.locator('.ap-board-body').evaluate((body) => {
+      body.scrollTop = 0;
+    });
+    await page
+      .locator('iframe')
+      .screenshot({ path: process.env.MPS_SHIPMENT_SCREENSHOT, animations: 'disabled' });
+  }
+  await frame.getByRole('button', { name: /查看异常 · .* 个基地 SKU/ }).click();
+  const issues = frame.getByRole('table', { name: '发货与库存异常报告' });
+  await issues.getByRole('button', { name: '定位 郑州 B', exact: true }).first().click();
+  await expect(frame.getByLabel('搜索发货单品')).toHaveValue('B');
+  const sku = table.locator('tr[data-shipment-base="郑州"][data-shipment-sku="B"]');
+  await expect(sku).toBeFocused();
+  await expect(sku.getByRole('rowheader')).toContainText('缺项产品');
+  const left = await sku.getByRole('rowheader').evaluate((header) => {
+    const region = header.closest('.sp-scroll');
+    region.scrollLeft = 0;
+    const before = header.getBoundingClientRect().left;
+    region.scrollLeft = 260;
+    return { moved: region.scrollLeft, shift: header.getBoundingClientRect().left - before };
+  });
+  assert.ok(left.moved > 0);
+  assert.ok(Math.abs(left.shift) < 1);
+});
 test('MPS shipment applies SKU, base and national adjustments to current effective values with exact totals, residuals and signed export evidence', async (t) => {
   const { page, frame, table } = await shipment(t);
   await upload(frame, [
@@ -229,7 +272,7 @@ test('MPS shipment applies SKU, base and national adjustments to current effecti
   const csv = await exported(page, frame);
   assert.match(csv, /截止日/);
   assert.match(csv, /2026-09-22/);
-  assert.match(csv, /'=1\+1/);
+  assert.match(csv, /=1\+1/);
   assert.match(csv, /,-3,/);
   assert.match(csv, /原始预计月末结存/);
   assert.match(csv, /调入计划、调出计划/);
@@ -354,7 +397,8 @@ test('MPS shipment calendars cross the year and leap February while shared evalu
   await expectShipment(table, '郑州 整月预估发货', '');
   await upload(frame, ['2026-12,郑州,B,十二月,汤圆,系列,组,220,0,0,0,0,0,0']);
   await expectShipment(table, '郑州 整月预估发货', '310');
-  await frame.getByLabel('评估版本选择').selectOption('local-2');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2024-03');
+  await frame.getByLabel('评估版本选择', { exact: true }).selectOption('local-2');
   await expectShipment(table, '郑州 整月预估发货', '291');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await expect(frame.locator('.ap-app')).toHaveAttribute('data-step', 'process');
@@ -775,8 +819,11 @@ test('MPS cutoff average keeps four source decimal places in summaries, SKU deta
   });
   await expect(average).toHaveText('12.3456');
   await average.click();
-  await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('12.3456件/天');
-  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  const formula = frame.getByRole('dialog', { name: /计算过程/ });
+  await expect(formula).toContainText('12.3456件/天');
+  await expect(formula.getByRole('button', { name: /^关闭(?:弹窗)?$/ })).toHaveCount(1);
+  await expect(formula.locator('.dc-dialog-footer')).toHaveCount(0);
+  await formula.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   assert.match(await exported(page, frame), /12\.3456/);
 });
 
@@ -809,7 +856,7 @@ test('MPS cutoff snapshots keep zero and missing averages distinct and do not in
   await expect(frame.getByRole('dialog', { name: /计算过程/ })).toContainText('截止日日号减1为0');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const csv = await exported(page, frame);
-  assert.match(csv, /截止日日号减1为0/);
+  assert.doesNotMatch(csv, /截止日日号减1为0/);
   assert.doesNotMatch(csv, /Infinity|NaN/);
   await page.clock.setFixedTime(new Date('2026-10-22T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
@@ -1127,7 +1174,7 @@ test('shipment exposes national and base category, material group and SKU levels
     .locator('tbody > tr')
     .evaluateAll((rows) => rows.slice(0, 5).map((row) => row.className));
   assert.deepEqual(levels, ['sp-total', 'sp-level-1', 'sp-level-1', 'sp-level-2', 'sp-sku']);
-  const hierarchy = await exported(page, frame, '下载汇总及明细');
+  const hierarchy = await exported(page, frame, '下载发货与结存', '发货汇总');
   assert.match(
     hierarchy,
     /全国合计,合计[\s\S]*全国合计,大类,汤圆[\s\S]*全国合计,大类,水饺[\s\S]*全国合计,物料组,汤圆[\s\S]*全国合计,SKU,汤圆/,
@@ -1343,7 +1390,7 @@ test('数仓调拨各方向独立回退并参与逐SKU结存，历史手填值�
       .transferPlans,
     selected.shipment.transferPlans,
   );
-  assert.match(await exported(page, frame), /纠偏.*初版/);
+  assert.doesNotMatch(await exported(page, frame), /纠偏优先，初版回退/);
 });
 
 test('完整快照无库存记录取零，字段为空或重复时待定，失败不回填零', async (t) => {

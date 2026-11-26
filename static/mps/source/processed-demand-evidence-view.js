@@ -141,7 +141,7 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
     return h(
       'details',
       {
-        className: 'wf-disclosure',
+        className: 'wf-disclosure mps-report-details',
         open,
         onToggle: (event) => {
           if (event.target === event.currentTarget) setOpen(event.currentTarget.open);
@@ -149,13 +149,13 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
       },
       h('summary', null, '预览大类计算过程'),
       h(
+        'button',
+        { className: 'mps-download', disabled: !selected, onClick: exportRows },
+        '下载当前计算过程',
+      ),
+      h(
         'section',
         { 'aria-label': '大类计算过程预览' },
-        h(
-          'p',
-          { className: 'wf-note' },
-          '大类计算使用全国口径，预览随当前大类和月份筛选。基地与SKU筛选决定可预览的大类。数量显示整数，系数显示百分比，下载保留原始精度；未采用的方法显示不适用。',
-        ),
         selected
           ? h(
               react.Fragment,
@@ -195,7 +195,6 @@ export function createProcessedDemandEvidence(react, { downloadCsv }) {
                     ),
                   ),
                 ),
-                h('button', { onClick: exportRows }, '下载当前计算过程'),
               ),
               h(
                 'section',

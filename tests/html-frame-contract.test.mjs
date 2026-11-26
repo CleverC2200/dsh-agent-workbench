@@ -123,6 +123,16 @@ async function fixture(t, pageId = 'inventory-fixture', frameHtml, translations)
   return { page, child, errors, loads: () => loads };
 }
 
+async function disconnect(page) {
+  await page.evaluate(() => {
+    window.failEvents = true;
+  });
+  await expect(page.getByRole('alert').filter({ hasText: '页面连接已断开' })).toBeVisible();
+  await page.evaluate(() => {
+    window.failEvents = false;
+  });
+}
+
 test('MPS reconnect success stays on one line outside the crowded toolbar and dismisses automatically', async (t) => {
   const { page, errors } = await fixture(t, 'plan-category-production', undefined, {
     pageReconnect: '重新连接页面能力',
@@ -132,7 +142,8 @@ test('MPS reconnect success stays on one line outside the crowded toolbar and di
   await page.addStyleTag({ content: '.gea-page-toolbar-seat { width: 420px; }' });
   await page.evaluate(() => window.finishOpen('session-1'));
   const retry = page.getByRole('button', { name: '重新连接页面能力', exact: true });
-  await expect(retry).toBeEnabled();
+  await expect(retry).toHaveCount(0);
+  await disconnect(page);
   await retry.click();
   const notice = page.getByRole('status');
   await expect(notice).toHaveText('页面已重新连接');
@@ -144,9 +155,7 @@ test('MPS reconnect success stays on one line outside the crowded toolbar and di
   assert.ok(geometry.height <= 30, `success notice wraps to ${geometry.height}px`);
   assert.ok(geometry.top >= geometry.bottom, 'success notice must not squeeze toolbar actions');
   await expect(notice).toBeHidden({ timeout: 5000 });
-  await expect(retry).toBeEnabled();
-  await retry.click();
-  await expect(notice).toBeVisible();
+  await expect(retry).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
   assert.deepEqual(errors, []);
 });
@@ -155,8 +164,9 @@ test('MPS reconnect replaces the owned frame, releases the old connection and pr
   const { page, errors, loads } = await fixture(t, 'plan-category-production');
   await page.evaluate(() => window.finishOpen('session-1'));
   const retry = page.getByRole('button', { name: 'pageReconnect', exact: true });
-  await expect(retry).toBeEnabled();
+  await expect(retry).toHaveCount(0);
   await page.getByLabel('public draft fixture').fill('重连保留的会话草稿');
+  await disconnect(page);
   const before = loads();
   await retry.click();
   await expect(page.getByRole('status')).toContainText('pageReconnected');
@@ -173,7 +183,7 @@ test('the MPS refresh action reaches the Host without replacing the page connect
   const author = await build({
     stdin: {
       contents:
-        "import { registerMpsRefresh } from './static/mps/source/context.js'; registerMpsRefresh(() => { document.body.dataset.recalculated = 'yes'; });",
+        "import { registerMpsRefresh } from './static/mps/source/context.js'; registerMpsRefresh(() => { document.body.dataset.refreshed = 'yes'; });",
       resolveDir: process.cwd(),
     },
     bundle: true,
@@ -202,7 +212,11 @@ test('the MPS refresh action reaches the Host without replacing the page connect
       {
         type: 'TOOL_CALL_ARGS',
         toolCallId: 'mps-refresh',
-        delta: JSON.stringify({ kind: 'invoke', target: 'control:refresh', reason: '重算' }),
+        delta: JSON.stringify({
+          kind: 'invoke',
+          target: 'control:refresh',
+          reason: '刷新当前步骤',
+        }),
       },
       { type: 'TOOL_CALL_END', toolCallId: 'mps-refresh' },
     ];
@@ -218,7 +232,7 @@ test('the MPS refresh action reaches the Host without replacing the page connect
     )
     .toBe(JSON.stringify({ toolCallId: 'mps-refresh', applied: true }));
   await expect(page.frameLocator('iframe').locator('body')).toHaveAttribute(
-    'data-recalculated',
+    'data-refreshed',
     'yes',
   );
   assert.equal(loads(), before);
@@ -247,14 +261,8 @@ test('MPS reconnect reopens the owned Session after a lost channel', async (t) =
   const { page, errors } = await fixture(t, 'plan-category-production');
   await page.evaluate(() => window.finishOpen('session-1'));
   const retry = page.getByRole('button', { name: 'pageReconnect', exact: true });
-  await expect(retry).toBeEnabled();
-  await page.evaluate(() => {
-    window.failEvents = true;
-  });
-  await expect(page.getByRole('alert')).toContainText('页面连接已断开');
-  await page.evaluate(() => {
-    window.failEvents = false;
-  });
+  await expect(retry).toHaveCount(0);
+  await disconnect(page);
   await retry.click();
   await expect(page.getByRole('status')).toContainText('pageReconnected');
   await expect.poll(() => page.evaluate(() => opens.length)).toBe(2);
@@ -269,7 +277,7 @@ test('MPS reconnect restores the actual product input and the unsent Conversatio
   );
   await page.evaluate(() => window.finishOpen('session-1'));
   const retry = page.getByRole('button', { name: 'pageReconnect', exact: true });
-  await expect(retry).toBeEnabled();
+  await expect(retry).toHaveCount(0);
   const frame = page.frameLocator('iframe');
   await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: 'reconnect-products.csv',
@@ -281,6 +289,7 @@ test('MPS reconnect restores the actual product input and the unsent Conversatio
   const products = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(products.locator('tbody tr')).toHaveCount(1);
   await page.getByLabel('public draft fixture').fill('实际MPS重连前未发送的草稿');
+  await disconnect(page);
   await retry.click();
   await expect(page.getByRole('status')).toContainText('pageReconnected');
   await expect(products.locator('tbody tr')).toHaveCount(1);

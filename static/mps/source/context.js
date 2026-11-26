@@ -4,7 +4,6 @@ import {
   currentSessionId,
   reportElements,
   action,
-  ask,
 } from '../../../business/shared/channel.js';
 import { createPageViewState } from '../../../business/shared/view-state.js';
 export const mpsView = createPageViewState('plan-category-production');
@@ -21,7 +20,7 @@ let connected = false,
 let latest;
 let lifetime = new AbortController();
 const notice =
-  '七步使用同一评估草稿。期初、纠偏、历史发货及主数据经mps授权读取，两个提报版本和发货指标分别使用。模型预测按固定月份批次读取双期，基地多维发货按源口径分别展示；库存发布映射及未确认规则对应结果留空。后续需求、结存、约束、产能和报告使用当前输入与同一计算结果，不采用原型模拟值。人工配置仅作用于本地草稿；正式保存、确认及业务写入未接入。下载不等于业务保存。本地输入、约束与调整通过工作台按身份、租户、对话和版本隔离恢复，业务来源重新读取；未关联对话时请先导出底稿。';
+  '七步使用同一评估草稿。期初、纠偏、历史发货及主数据经mps授权读取，两个提报版本和发货指标分别使用。模型预测按固定月份批次读取双期，基地多维发货按源口径分别展示；库存发布映射及未确认规则对应结果留空。后续需求、结存、约束、产能和报告使用当前输入与同一计算结果，不采用原型模拟值。人工配置仅作用于本地草稿；正式保存、确认及业务写入未接入。下载不等于业务保存。评估版本、本地输入、约束与调整按当前业务环境、租户和账号保存在本机，同一账号新建对话后可继续使用。业务来源重新读取；未关联对话时请先导出底稿。';
 mpsView.subscribe((_snapshot, event) => {
   if (event === 'released') {
     cancelPublication();
@@ -89,11 +88,6 @@ function mpsSnapshot() {
     notice,
     parts: Object.fromEntries([...parts].map(([key, part]) => [key, part.value])),
   };
-}
-export function askMpsQuestion(text, signal) {
-  const snapshot = mpsSnapshot();
-  if (!connected || !snapshot) throw Error('页面能力尚未连接，请重新连接页面后重试。');
-  return ask(text, snapshot, { signal });
 }
 function cancelPublication() {
   epoch++;
@@ -165,14 +159,14 @@ void ready.then(() => {
   connected = true;
   schedule();
 });
-export function registerMpsRefresh(startRecalculation) {
+export function registerMpsRefresh(refreshPage) {
   return action(
     'refresh',
-    '重读MPS业务数据并重算，保留本地草稿和当前页面',
+    '刷新 MPS 当前步骤',
     (_, { signal }) => {
       signal.throwIfAborted();
-      startRecalculation();
-      return { status: 'recalculation-started' };
+      refreshPage();
+      return { status: 'refresh-started' };
     },
     { effect: 'view' },
   );

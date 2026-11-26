@@ -44,9 +44,7 @@ async function navigationPage(t) {
           .join('\n'),
     ),
   });
-  const month = (
-    await frame.getByLabel('评估版本选择').locator('option:checked').textContent()
-  ).match(/\d{4}-\d{2}/)[0];
+  const month = await frame.getByLabel('评估月份选择').inputValue();
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '提报.csv',
     mimeType: 'text/csv',
@@ -192,10 +190,13 @@ test('第2步宽窗表格铺满，长物料组不盖数量且正常与窄窗滚�
   const table = await shipmentTable(frame);
   await table.getByRole('button', { name: '展开 郑州', exact: true }).press('Enter');
   await table.getByRole('button', { name: '展开 郑州 汤圆', exact: true }).press('Enter');
-  for (const width of [1830, 1200, 600]) {
+  for (const width of [1830, 1200, 715, 600, 390, 1200]) {
     await page.evaluate((width) => {
       document.getElementById('root').style.width = `${width + 300}px`;
     }, width);
+    const compact = width <= 715;
+    if (compact) await expect(table).toHaveAttribute('data-compact', 'true');
+    else await expect(table).not.toHaveAttribute('data-compact', 'true');
     await table.locator('..').evaluate((element) => {
       element.scrollLeft = 0;
       element.scrollTop = 0;
@@ -206,6 +207,27 @@ test('第2步宽窗表格铺满，长物料组不盖数量且正常与窄窗滚�
         wrapper: element.parentElement.getBoundingClientRect().right,
       }));
       assert.ok(Math.abs(edges.table - edges.wrapper) < 3, '宽窗末列与表格滚动区域右边缘对齐');
+    }
+    if (compact) {
+      const keyColumns = await table.evaluate((element) => {
+        const wrapper = element.parentElement;
+        const bounds = wrapper.getBoundingClientRect();
+        const headers = [...element.tHead.rows[1].cells].slice(0, 3);
+        const values = [...element.tBodies[0].rows[0].cells].slice(1, 4);
+        return {
+          headings: headers.map((cell) => cell.innerText.split('\n')[0]),
+          leftWidth: element.tHead.rows[0].cells[0].getBoundingClientRect().width,
+          visible: [...headers, ...values].every((cell) => {
+            const box = cell.getBoundingClientRect();
+            return (
+              box.left >= bounds.left - 1 && box.right <= bounds.left + wrapper.clientWidth + 1
+            );
+          }),
+        };
+      });
+      assert.deepEqual(keyColumns.headings, ['本月已发货', '整月预估发货', '预计月末结存']);
+      assert.ok(keyColumns.leftWidth <= 149, '窄窗固定首列采用紧凑宽度');
+      assert.ok(keyColumns.visible, '三项关键数量的表头和值在首屏完整可见');
     }
     const group = table.getByRole('row').filter({
       has: frame.getByRole('button', { name: `收起 郑州 汤圆 ${longGroup}`, exact: true }),
@@ -246,15 +268,18 @@ test('第2步宽窗表格铺满，长物料组不盖数量且正常与窄窗滚�
     );
 
     await checkScrolledTable(table, frame);
-    if (width === 600) {
+    if (compact) {
       const sticky = await table.evaluate((element) => {
         const wrapper = element.parentElement.getBoundingClientRect();
         const first = element.tHead.rows[0].cells[0].getBoundingClientRect();
-        const last = element.tHead.rows[1].lastElementChild.getBoundingClientRect();
-        return { left: first.left - wrapper.left, right: last.right - wrapper.right };
+        const last = element.tHead.rows[1].lastElementChild;
+        return {
+          left: first.left - wrapper.left,
+          rightPinned: getComputedStyle(last).position === 'sticky',
+        };
       });
       assert.ok(Math.abs(sticky.left) < 3, '窄窗横向滚动后首列仍固定在左边缘');
-      assert.ok(Math.abs(sticky.right) < 3, '窄窗横向滚动后结存列仍固定在右边缘');
+      assert.equal(sticky.rightPinned, false, '窄窗右侧留给滚动的明细列');
     }
   }
 });
@@ -265,10 +290,17 @@ test('第7步点击大类展开全部物料组和超过一页的SKU，旁支独�
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
   const status = frame.getByRole('status').filter({ hasText: '单品月份' });
   await expect(status).toContainText('暂无单品月份满足排产条件，缺项待补');
-  await expect(status).toContainText('满足排产条件 0/186 个单品月份');
+  await expect(status).toContainText('已评估 0/186 个单品月份');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   await expect(status).toContainText('暂无单品月份满足排产条件，缺项待补');
-  await expect(status).toContainText('满足排产条件 0/186 个单品月份');
+  await expect(status).toContainText('已评估 0/186 个单品月份');
+  const summary = frame.getByRole('table', { name: '产销存汇总', exact: true });
+  await expect(summary.getByRole('cell', { name: '待评估', exact: true }).first()).toBeVisible();
+  const summaryBounds = await summary.boundingBox();
+  const equipment = frame.locator('summary').filter({ hasText: '设备范围与产品占用' });
+  await expect(equipment.locator('..')).not.toHaveAttribute('open', '');
+  const equipmentBounds = await equipment.boundingBox();
+  assert.ok(summaryBounds.y < equipmentBounds.y, '产销存汇总先于设备详情');
   const statusBounds = await status.boundingBox();
   const exceptionBounds = await frame
     .getByRole('heading', { name: '产品范围与池外异常', exact: true })
@@ -276,6 +308,16 @@ test('第7步点击大类展开全部物料组和超过一页的SKU，旁支独�
   assert.ok(statusBounds.y < exceptionBounds.y, '产销存结果状态显示在产品范围与池外异常之前');
   await frame.getByRole('button', { name: `展开全国 ${month}`, exact: true }).press('Enter');
   const table = frame.getByRole('table', { name: '求解单品明细', exact: true });
+  const summaryOdm = frame
+    .getByRole('table', { name: '产销存汇总', exact: true })
+    .locator(':scope > thead')
+    .getByRole('columnheader', { name: 'ODM默认计划到货量', exact: true });
+  const detailOdm = table.getByRole('columnheader', { name: 'ODM默认计划到货量', exact: true });
+  await expect(frame.locator('.wf-plan-selected')).toContainText('62 条基地 SKU 记录');
+  await expect(frame.locator('.wf-plan-detail-filters')).toContainText('62 个去重单品');
+  for (const heading of [summaryOdm, detailOdm]) {
+    assert.ok(await heading.evaluate((cell) => cell.scrollWidth <= cell.clientWidth + 1));
+  }
   const category = table.getByRole('button', { name: '产销存 大类 · 汤圆', exact: true });
   await category.press('Enter');
   await expect(table.getByRole('cell', { name: 'P60', exact: true })).toHaveCount(1);

@@ -6,7 +6,7 @@
   )
   .ap-board-body {
   padding: 0;
-  background: #f4f5f8;
+  background: var(--workbench-page);
 }
 .wf-page {
   min-width: 0;
@@ -17,25 +17,13 @@
   font-variant-numeric: tabular-nums;
 }
 .wf-summary-value small {
-  color: #555d68;
+  color: var(--workbench-body);
   font-size: 12px;
   font-weight: 400;
 }
 .wf-disclosure {
   width: 100%;
   margin: 16px 0;
-  padding: 12px 16px;
-  border: 1px solid var(--dc-line, #e3e6ea);
-  border-radius: 10px;
-  background: var(--dc-surface, #fff);
-}
-.wf-disclosure > summary,
-.wf-limitations > summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-.wf-disclosure[open] > summary {
-  margin-bottom: 12px;
 }
 .wf-detail-anchor {
   scroll-margin-top: 24px;
@@ -55,7 +43,7 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  background: #f4f5f8;
+  background: var(--workbench-page);
   padding: 6px 0;
   margin-bottom: 8px;
 }
@@ -83,18 +71,13 @@
 }
 .ap-app[data-step='process'] .wf-toolbar {
   padding: 4px 12px;
-  background: var(--dc-surface, #fff);
-  border: 1px solid var(--dc-line, #e3e6ea);
+  background: var(--workbench-surface);
+  border: 1px solid var(--workbench-border);
   border-radius: 10px;
 }
 .wf-exception-reports {
   display: grid;
   gap: 12px;
-}
-.wf-exception-report > summary {
-  padding: 12px 16px;
-  cursor: pointer;
-  font-weight: 600;
 }
 .wf-actions {
   margin-bottom: 12px;
@@ -175,7 +158,7 @@
   color: #bd2338;
 }
 .wf-page .wf-empty,
-.wf-limitations {
+.wf-limitations > ul {
   padding: 12px 18px;
   color: var(--dc-muted);
 }
@@ -227,13 +210,13 @@
 .wf-page button:focus-visible,
 .wf-page input:focus-visible,
 .wf-page select:focus-visible {
-  outline: 2px solid var(--dc-accent, #b62036);
+  outline: 2px solid var(--workbench-brand);
   outline-offset: 2px;
 }
 .wf-rule-notice {
   margin: 0 0 16px;
   padding: 12px 16px;
-  background: #fff;
+  background: var(--workbench-surface);
   color: var(--dc-ink);
   border: 1px solid var(--dc-line);
   border-radius: 10px;
@@ -250,11 +233,6 @@
   align-items: center;
   gap: 6px;
 }
-.wf-advanced > summary {
-  cursor: pointer;
-  padding: 10px 16px;
-  font-weight: 600;
-}
 .wf-page .wf-advanced {
   width: 100%;
 }
@@ -263,6 +241,22 @@
 }
 .wf-target-heading {
   padding: 0 18px;
+}
+.wf-target-status {
+  padding: 14px 16px;
+  background: var(--workbench-subtle);
+  border-bottom: 1px solid var(--dc-border);
+}
+.wf-target-status strong {
+  color: var(--workbench-text);
+}
+.wf-target-status p {
+  margin: 5px 0 0;
+  color: var(--dc-muted);
+}
+.wf-target-status[data-state='error'] strong,
+.wf-plan-toolbar[data-state='error'] .wf-plan-status strong {
+  color: var(--workbench-selected-text);
 }
 .wf-rule-form {
   display: grid;
@@ -294,7 +288,7 @@
   padding: 3px 7px;
   border-radius: 4px;
   background: #eef1f5;
-  color: #555d68;
+  color: var(--workbench-body);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -340,23 +334,12 @@
   flex: 1 1 300px;
   margin: 0;
 }
-.wf-plan-months {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin: 16px 0;
-}
 .wf-page button.wf-number {
   border: 0;
   background: transparent;
   color: var(--dc-accent);
   padding: 4px;
   font-variant-numeric: tabular-nums;
-}
-@media (max-width: 680px) {
-  .wf-plan-months {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .wf-plan-coverage {
@@ -373,7 +356,7 @@
   gap: 6px;
 }
 .wf-plan-status strong {
-  color: var(--dc-ink, #20232a);
+  color: var(--workbench-text);
   font-size: 14px;
 }
 .wf-plan-status span {
@@ -387,36 +370,29 @@
 .wf-plan-toolbar[data-state='complete'] .wf-plan-status strong {
   color: #168e58;
 }
-.wf-page[data-planning='true'] .wf-plan-month {
-  margin: 0;
-  padding: 18px;
-}
-.wf-plan-month h3 {
-  margin: 0 0 14px;
+.wf-result-pending {
   color: var(--dc-muted);
-  font-size: 12px;
-  font-weight: 400;
+  white-space: nowrap;
 }
-.wf-plan-month-value {
+.wf-issue-summary {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  list-style: none;
+  margin: 0;
+  padding: 12px 16px;
+}
+.wf-issue-summary li {
+  display: flex;
   gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--workbench-muted-surface);
+  color: var(--workbench-body);
 }
-.wf-plan-month-value > .wf-summary-value {
-  color: var(--dc-ink, #20232a);
-  font-size: 23px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.wf-plan-month-value > span:last-child {
-  color: var(--dc-muted);
-  font-size: 12px;
-}
-.wf-plan-month p {
-  margin: 12px 0 0;
-  color: var(--dc-muted);
-  line-height: 1.7;
-  font-size: 12px;
+.wf-issue-summary strong {
+  color: var(--workbench-text);
+  font-variant-numeric: tabular-nums;
 }
 .wf-page[data-planning='true'] .wf-summary-value {
   display: inline;
@@ -438,7 +414,7 @@
   max-height: 380px;
 }
 .wf-page[data-planning='true'] th {
-  background: #f5f6f8;
+  background: var(--workbench-muted-surface);
 }
 .wf-page[data-planning='true'] td {
   padding: 10px 12px;
@@ -465,7 +441,7 @@
   font-size: 12px;
 }
 .wf-plan-selected > td {
-  background: #fff2f4;
+  background: var(--workbench-brand-soft);
 }
 .wf-plan-detail-row > td {
   padding: 16px;
@@ -494,10 +470,10 @@
 }
 .wf-plan-disclosure {
   margin: 0 0 16px;
-  border: 1px solid var(--dc-border);
-  border-radius: 12px;
-  background: #fff;
-  overflow: hidden;
+}
+.wf-limitations > ul {
+  margin: 0;
+  padding-inline-start: 32px;
 }
 .wf-capacity-load {
   display: inline-block;
@@ -538,43 +514,12 @@
   padding: 12px;
   background: #fafafa;
 }
-.wf-plan-disclosure > summary {
-  padding: 10px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-}
-.wf-plan-disclosure > summary > span {
-  margin-left: 12px;
-  color: var(--dc-muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-.wf-plan-disclosure[open] > summary {
-  border-bottom: 1px solid var(--dc-border);
-}
-.wf-plan-pagination {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 18px;
-}
-.wf-plan-pagination > span {
-  margin-right: auto;
-  color: var(--dc-muted);
-  font-size: 12px;
-}
 .wf-page[data-planning='true'] button:focus-visible,
 .wf-page[data-planning='true'] summary:focus-visible {
-  outline: 2px solid #df1732;
+  outline: 2px solid var(--workbench-brand);
   outline-offset: 2px;
 }
 @media (max-width: 900px) {
-  .wf-page[data-planning='true'] .wf-plan-months {
-    gap: 12px;
-  }
   .wf-plan-status {
     flex-basis: 100%;
   }
@@ -585,7 +530,7 @@
   left: 0;
   min-width: 96px;
   z-index: 2;
-  background: #fff;
+  background: var(--workbench-surface);
 }
 .wf-plan-balances > table > thead > tr > th:nth-child(2),
 .wf-plan-balances > table > tbody > tr:not(.wf-plan-detail-row) > td:nth-child(2) {
@@ -593,39 +538,36 @@
   left: 96px;
   min-width: 72px;
   z-index: 2;
-  background: #fff;
+  background: var(--workbench-surface);
 }
 .wf-plan-balances > table > thead > tr > th:first-child,
 .wf-plan-balances > table > thead > tr > th:nth-child(2) {
   z-index: 3;
-  background: #f5f6f8;
+  background: var(--workbench-muted-surface);
 }
 .wf-plan-balances > table > tbody > .wf-plan-selected > td:first-child,
 .wf-plan-balances > table > tbody > .wf-plan-selected > td:nth-child(2) {
-  background: #fff2f4;
+  background: var(--workbench-brand-soft);
 }
 .wf-plan-balances > table > thead > tr > th:last-child,
 .wf-plan-balances > table > tbody > tr:not(.wf-plan-detail-row) > td:last-child {
   position: sticky;
   right: 0;
   z-index: 2;
-  background: #fff;
+  background: var(--workbench-surface);
   box-shadow: -1px 0 var(--dc-border);
 }
 .wf-plan-balances > table > thead > tr > th:last-child {
   z-index: 3;
-  background: #f5f6f8;
+  background: var(--workbench-muted-surface);
 }
 .wf-plan-balances > table > tbody > .wf-plan-selected > td:last-child {
-  background: #fff2f4;
+  background: var(--workbench-brand-soft);
 }
 .wf-page[data-planning='true'] > details,
 .wf-page .wf-plan-disclosure {
   width: 100%;
   max-width: none;
-}
-.wf-page .wf-plan-disclosure > summary {
-  color: var(--dc-ink, #20232a);
 }
 .wf-plan-balances > table {
   table-layout: fixed;
@@ -670,6 +612,17 @@
 .wf-plan-detail-row .wf-table-scroll th {
   top: 38px;
 }
+.wf-column-period {
+  display: block;
+  white-space: nowrap;
+}
+.wf-page table[aria-label='大类需求总表'] :is(th, td) {
+  padding-inline: 8px;
+}
+.wf-page table[aria-label='大类需求总表']:has(th:last-child > .wf-column-period) td:last-child {
+  min-width: 0;
+  white-space: nowrap;
+}
 .wf-processed-table {
   width: 100%;
   min-width: 920px;
@@ -691,12 +644,12 @@
   max-width: 230px;
   width: 230px;
   z-index: 2;
-  background: #fff;
+  background: var(--workbench-surface);
   text-align: left;
 }
 .wf-page .wf-processed-table thead th:first-child {
   z-index: 3;
-  background: var(--dc-head, #f7f8fa);
+  background: var(--workbench-subtle);
 }
 .wf-page .wf-processed-table tbody th {
   top: auto;
@@ -751,7 +704,7 @@
   margin-top: 4px;
 }
 .wf-processed-table td > small {
-  color: #555d68;
+  color: var(--workbench-body);
 }
 .wf-page .wf-processed-table td:last-child {
   min-width: 0;
@@ -759,7 +712,7 @@
 }
 .wf-demand-toggle:focus-visible,
 .wf-processed-scroll:focus-visible {
-  outline: 2px solid #df1732;
+  outline: 2px solid var(--workbench-brand);
   outline-offset: -2px;
 }
 .wf-quantity-cell {
@@ -770,14 +723,14 @@
   font-variant-numeric: tabular-nums;
 }
 .wf-quantity-cell small {
-  color: #555d68;
+  color: var(--workbench-body);
 }
 .wf-quantity-cell .wf-actions {
   margin: 0;
   gap: 8px;
 }
 .wf-page summary:focus-visible {
-  outline: 2px solid #df1732;
+  outline: 2px solid var(--workbench-brand);
   outline-offset: 2px;
 }
 
@@ -836,7 +789,7 @@
 }
 
 .wf-page .wf-processed-table .wf-demand-total > * {
-  background: var(--dc-head, #f7f8fa);
+  background: var(--workbench-subtle);
   font-weight: 600;
 }
 
@@ -888,7 +841,7 @@
   position: static;
 }
 .ap-app[data-step='report'] .wf-report-toggle:focus-visible {
-  outline: 2px solid #df1732;
+  outline: 2px solid var(--workbench-brand);
   outline-offset: -2px;
 }
 
@@ -904,4 +857,11 @@
 }
 .ap-app[data-step='report'] .wf-report-toggle svg {
   flex: 0 0 12px;
+}
+
+.wf-plan-balances > table > thead > tr > th:has(> .wf-odm-arrival-label) {
+  width: 12em;
+}
+.wf-plan-detail-row th:has(> .wf-odm-arrival-label) {
+  min-width: 12em;
 }

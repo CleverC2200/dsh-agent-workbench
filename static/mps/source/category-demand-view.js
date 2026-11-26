@@ -1,4 +1,5 @@
 import { matchesCategories } from './category-filter.js';
+import { createCalculationHelp } from './calculation-help.js';
 import { categoryDemandMissing } from './category-demand.js';
 import { demandBasisLabel, festivalOptionValue } from './festival-demand.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
@@ -57,13 +58,22 @@ export function createShipmentScopeNotice(react, { downloadCsv }) {
         ),
         h(
           'button',
-          { onClick: () => downloadCsv(`待定单品异常-${month}.csv`, columns, rows) },
+          {
+            className: 'mps-download',
+            onClick: () => downloadCsv(`待定单品异常-${month}.csv`, columns, rows),
+          },
           '下载待定单品异常CSV',
         ),
       ),
       h(
         'details',
-        { open: expanded, onToggle: (event) => setExpanded(event.currentTarget.open) },
+        {
+          className: 'mps-report-details',
+          open: expanded,
+          onToggle: (event) => {
+            if (event.target === event.currentTarget) setExpanded(event.currentTarget.open);
+          },
+        },
         h('summary', null, `查看待定单品异常（${rows.length}条）`),
         h(
           'p',
@@ -124,7 +134,15 @@ export function createCategoryDemand(
   { table, downloadCsv, downloadExceptions, useMpsPart },
 ) {
   const h = react.createElement;
+  const CalculationHelp = createCalculationHelp(react);
   const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv: downloadExceptions });
+  const calculationFormulas = [
+    ['① 环比法', '本月预估发货 × 环比'],
+    ['② 占比法', '全年预估 × 占比'],
+    ['两法平均量', '①、②各占一半'],
+    ['销售校正量', '销售提报量 × 达成率'],
+    ['加权', '仅 M+1 使用，两法平均量与销售校正量各占一半'],
+  ];
   const columns = [
     '大类',
     '月份',
@@ -168,6 +186,7 @@ export function createCategoryDemand(
     selectedCategories = [],
     shipmentSnapshot,
     result,
+    sourceRows,
     retryFestivalHistory,
     basisDisabled,
   }) {
@@ -182,6 +201,10 @@ export function createCategoryDemand(
     const calculationColumns = columns.map((name) => (name === '年度环比' ? chainColumn : name));
     const selectedRows = result.rows.filter((row) =>
       matchesCategories(row.category, selectedCategories),
+    );
+    const scopedSources = react.useMemo(
+      () => sourceRows.filter((row) => matchesCategories(row['大类'], selectedCategories)),
+      [sourceRows, selectedCategories],
     );
     const rows = result.rows.map((row, index) => {
       const missing = categoryDemandMissing(result, row);
@@ -339,19 +362,44 @@ export function createCategoryDemand(
         },
         h(
           'div',
-          { className: 'dc-card-head dc-demand-edit-bar' },
+          { className: 'dc-card-head dc-demand-edit-bar mps-report-heading mps-table-heading' },
           h('h3', {}, '大类预估需求数量'),
           h('span', { className: 'dc-card-note' }, '单位：件'),
           h(
-            'span',
-            { className: 'dc-card-note' },
-            '大类只读汇总，请在需求加工与收敛中按基地SKU和月份修正',
+            'button',
+            {
+              type: 'button',
+              className: 'mps-download',
+              disabled: !scopedSources.length,
+              onClick: () =>
+                downloadCsv(
+                  `${draft.month}-大类池内源明细.csv`,
+                  [
+                    '来源',
+                    '月份',
+                    '基地',
+                    '产品编码',
+                    '大类',
+                    '数量',
+                    '原始来源数量',
+                    '财年',
+                    '原始全国SKU财年量',
+                    '基地SKU财年量',
+                    '财年源月份数',
+                    '财年有效月份数',
+                    '池内大类财年量',
+                    '财年缺失或冲突月份',
+                    '财年核对异常',
+                    '上年同期发货数量',
+                    '上月发货数量',
+                    '取数依据',
+                    '缺项原因',
+                  ],
+                  scopedSources,
+                ),
+            },
+            '下载大类池内源明细',
           ),
-        ),
-        h(
-          'p',
-          { className: 'dc-card-note' },
-          '合计、逐月测算和明细下载均按当前大类筛选；缺项不补零。',
         ),
         table(
           ['大类', 'M+1', 'M+2', 'M+3', 'M+4'],
@@ -367,16 +415,31 @@ export function createCategoryDemand(
         ),
       ),
       h(
-        'details',
-        { className: 'dc-calculation-evidence' },
-        h('summary', {}, '逐月测算依据'),
+        'section',
+        { 'aria-label': '逐月测算' },
         h(
-          'section',
-          { 'aria-label': '逐月测算', className: 'dc-card dc-results dc-category-demand' },
+          'details',
+          { className: 'dc-card dc-results mps-report-details' },
+          h('summary', null, '逐月测算依据'),
           h(
             'div',
-            { className: 'dc-card-head dc-calculation-toolbar' },
-            h('h3', {}, '逐月测算（到大类预估需求数量）'),
+            { className: 'dc-toolbar dc-report-filters mps-disclosure-toolbar' },
+            h(
+              CalculationHelp,
+              { title: '逐月测算口径' },
+              h(
+                'p',
+                null,
+                `${result.rows[0]?.baseMonth ?? ''}为统计基月M。${festival ? '节日覆盖月份使用对照区间的历史环比和同期占比，窗口外沿用自然月。' : 'M+1、M+2使用历史环比，M+3、M+4使用年度环比；'}后月只承接前月环比测算量。四个月均计算两法平均量，仅M+1再与销售校正量各占一半，M+2至M+4直接使用两法平均量。M+4仅作库存参考。`,
+              ),
+              h(
+                'dl',
+                null,
+                calculationFormulas.map(([name, formula]) =>
+                  h('div', { key: name }, h('dt', null, name), h('dd', null, formula)),
+                ),
+              ),
+            ),
             h(
               'span',
               { className: 'dc-card-note' },
@@ -443,6 +506,7 @@ export function createCategoryDemand(
             h(
               'button',
               {
+                className: 'mps-download',
                 disabled: waiting,
                 onClick: () =>
                   downloadCsv(
@@ -490,32 +554,12 @@ export function createCategoryDemand(
                   '重试',
                 ),
             ),
-          h(
-            'p',
-            { className: 'dc-card-note' },
-            `${result.rows[0]?.baseMonth ?? ''}为统计基月M。${festival ? '节日覆盖月份使用对照区间的历史环比和同期占比，窗口外沿用自然月。' : 'M+1、M+2使用历史环比，M+3、M+4使用年度环比；'}后月只承接前月环比测算量。四个月均计算两法平均量，仅M+1再与销售校正量各占一半，M+2至M+4直接使用两法平均量。M+4仅作库存参考。`,
-          ),
           result.adjustmentIssues.length > 0 &&
             h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
           h(
             'div',
             { className: 'dc-category-demand-main' },
-            table(
-              calculationColumns,
-              visibleRows,
-              Object.fromEntries(
-                [
-                  ['① 环比法', '本月预估发货*环比'],
-                  ['② 占比法', '全年预估 × 占比'],
-                  ['两法平均量', '①②各占一半'],
-                  ['销售校正量', '销售提报量×达成率'],
-                  ['加权', '仅M+1：两法平均量与销售校正量各占一半'],
-                ].map(([name, formula]) => [
-                  name,
-                  h(react.Fragment, {}, name, h('small', {}, formula)),
-                ]),
-              ),
-            ),
+            table(calculationColumns, visibleRows),
           ),
         ),
       ),

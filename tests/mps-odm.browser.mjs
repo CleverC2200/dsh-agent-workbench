@@ -22,7 +22,7 @@ test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只�
         window.downloads=[];
         const View=createEvaluationOverview(React,{Dialog:()=>null,downloadCsv:(name,columns,rows)=>window.downloads.push({name,columns,rows})});
         const h=React.createElement;
-        const card=(title,body)=>h('section',null,h('h2',null,title),body);
+        const card=(title,body,actions)=>h('section',null,h('div',null,h('h2',null,title),actions),body);
         const table=(name,columns,rows)=>h('table',{'aria-label':name},h('thead',null,h('tr',null,...columns.map((c,i)=>h('th',{key:i},c)))),h('tbody',null,...rows.map((r,i)=>h('tr',{key:i},...r.map((v,j)=>h('td',{key:j},v?.content??v))))));
         const root=createRoot(document.getElementById('root'));
         const render=step=>root.render(h(View,{step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters:{month:'2026-12'},table,card,numberText:value=>value===null?'待补':String(value),onExecute(){}}));
@@ -43,7 +43,9 @@ test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只�
   await page.goto('https://mps-odm.test/');
   await page.addScriptTag({ content: output.outputFiles[0].text });
   await expect(page.getByRole('heading', { name: 'ODM默认计划到货', exact: true })).toBeVisible();
-  await expect(page.getByText(/供方真实能力、交期及实际到货尚未验证/).first()).toBeVisible();
+  await expect(
+    page.getByText('ODM默认供给，实际供方待确认', { exact: true }).first(),
+  ).toBeVisible();
   const schedules = page.getByRole('table', { name: 'ODM供方SKU月度默认计划' });
   await expect(schedules.getByRole('cell', { name: '90', exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '导出求解结果', exact: true }).click();
@@ -65,6 +67,13 @@ test('ODM页面与CSV同一结果：默认到货90，内部排产0，收货只�
   assert.equal(arrivals.rows[0]['默认计划到货量（件）'], 90);
   assert.match(arrivals.rows[0].说明, /未验证/);
   await page.evaluate(() => window.showReport());
-  await expect(page.locator('.wf-plan-month').first()).toContainText('ODM默认计划到货 90 件');
-  await expect(page.locator('.wf-plan-months')).not.toContainText('[object Object]');
+  const balance = page.getByRole('table', { name: '产销存汇总', exact: true });
+  await expect(
+    balance.getByRole('columnheader', { name: 'ODM默认计划到货量', exact: true }),
+  ).toBeVisible();
+  const national = balance
+    .getByRole('row')
+    .filter({ hasText: /2026-12.*全国/ })
+    .first();
+  await expect(national.locator('td').nth(5)).toHaveText('90');
 });

@@ -62,9 +62,8 @@ test('第3步隐藏产品范围对账，第4步展示和下载源清单覆盖、
   const section = frame.getByRole('region', { name: '产品范围对账', exact: true });
   await expect(section).toHaveCount(0);
   await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
-  await expect(section).toContainText('源清单4条，有效基地SKU 2项，实际参与2项');
-  await expect(section).toContainText('冲突1项');
-  await expect(section).toContainText('全国基地范围及独立完整性证明');
+  await expect(section.getByRole('table')).toContainText('大类冲突');
+  await expect(section).not.toContainText(/实际参与 \d+ 个基地 SKU|筛选结果/);
   const rows = await downloadRows(page, section);
   assert.equal(rows.length, 3);
   assert.equal(rows.find((row) => row.SKU === 'B')['对账结果'], '已覆盖');
@@ -74,6 +73,12 @@ test('第3步隐藏产品范围对账，第4步展示和下载源清单覆盖、
     rows.every((row) => row['覆盖声明'] === '实际参与范围' && row['源统计期'] === '2026-11'),
   );
   assert.ok(rows.every((row) => /全国基地范围/.test(row['缺少的覆盖证明'])));
+  await section.getByLabel('对账基地', { exact: true }).selectOption('乙');
+  assert.deepEqual((await downloadRows(page, section)).map((row) => row.SKU), ['B']);
+  await section.getByLabel('搜索对账基地或SKU', { exact: true }).fill('无匹配SKU');
+  await expect(
+    section.getByRole('button', { name: '下载产品范围对账CSV', exact: true }),
+  ).toBeDisabled();
 });
 
 test('三类池外异常页面和CSV保留双来源，按基地SKU去重并单列池外老品', async (t) => {
@@ -234,7 +239,8 @@ test('主动排除的基地SKU继续列在对账内，页面和CSV给出首个�
   });
   await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   const section = frame.getByRole('region', { name: '产品范围对账', exact: true });
-  await expect(section).toContainText('实际参与1项。已覆盖1项，主动排除1项，遗漏0项');
+  const status = section.getByRole('table').getByRole('cell', { name: '主动排除', exact: true });
+  await expect(status).toHaveCount(1);
   const rows = await downloadRows(page, section);
   const excluded = rows.find((row) => row.SKU === 'B');
   assert.equal(excluded['对账结果'], '主动排除');

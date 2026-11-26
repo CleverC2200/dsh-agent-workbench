@@ -1,3 +1,17 @@
+export function downloadFile(name, mime, content) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function downloadWorkbook(name, tables) {
+  const bytes = await workbookBytes(tables);
+  downloadFile(name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
+}
+
 export async function workbookBytes(tables) {
   const XLSX = await import('xlsx-republish');
   const book = XLSX.utils.book_new();

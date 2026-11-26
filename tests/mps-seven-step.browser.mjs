@@ -1,3 +1,4 @@
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 import { mpsPageWithExactProductPeriod as mpsPage } from './helpers/mps-page.mjs';
 import {
   shipmentSourceRow,
@@ -38,32 +39,50 @@ test('MPS seven steps share the selected evaluation without legacy simulation co
     '产销存报告',
   ];
   await expect(frame.locator('.ap-page-tab')).toHaveCount(7);
+  const header = frame.locator('.dc-page-head');
+  const refresh = header.getByRole('button', { name: '刷新', exact: true });
+  const colors = await frame.locator('body').evaluate((element) => {
+    const style = getComputedStyle(element);
+    const probe = document.createElement('span');
+    const color = (name) => {
+      probe.style.color = style.getPropertyValue(name).trim();
+      return probe.style.color;
+    };
+    return {
+      brand: color('--workbench-brand'),
+      brandSoft: color('--workbench-brand-soft'),
+    };
+  });
+  assert.ok(colors.brand, 'shared Workbench brand color is loaded inside the MPS page');
   for (const step of steps) {
     await frame.locator('.ap-page-tab').filter({ hasText: step }).click();
     await expect(frame.getByRole('heading', { name: step, exact: true, level: 1 })).toBeVisible();
-    await expect(frame.getByLabel('评估版本选择').locator('option:checked')).toContainText(
-      '2026-12',
-    );
+    await expect(refresh).toBeVisible();
+    await expect(header.getByRole('button', { name: '数据源', exact: true })).toHaveCount(0);
+    await expect(frame.getByLabel('评估月份选择')).toHaveValue('2026-12');
     await expect(frame.getByText('需求权重', { exact: true })).toHaveCount(0);
     await expect(
       frame.locator('button').filter({ hasText: /下一步|上一步|返回产能评估/ }),
     ).toHaveCount(0);
-    const badge = frame.locator('.ap-page-tab[data-active="true"] .ap-page-tab-step');
-    assert.ok(
-      await badge.evaluate((e) => {
-        const style = getComputedStyle(e);
-        return (
-          style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.color !== style.backgroundColor
-        );
-      }),
+    const active = frame.locator('.ap-page-tab[data-active="true"]');
+    await expect(active).toHaveCSS('background-color', colors.brandSoft);
+    const badge = active.locator('.ap-page-tab-step');
+    await expect(badge).toHaveCSS('background-color', colors.brand);
+    assert.notEqual(
+      await badge.evaluate((element) => getComputedStyle(element).color),
+      colors.brand,
     );
     assert(!/模拟|40\/40\/20/.test(await frame.locator('body').innerText()));
   }
   assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  const beforeRefresh = await page.evaluate(() => window.readView().localDrafts);
+  await refresh.click();
+  await expect(frame.getByRole('status').filter({ hasText: '请先运行产能评估' })).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), beforeRefresh);
   const download = page.waitForEvent('download');
   await frame.getByRole('button', { name: '下载需求推导参考', exact: true }).click();
-  const csv = await readFile(await (await download).path(), 'utf8');
+  const csv = await mpsDownloadText(await (await download).path(), '需求推导参考');
   assert.match(csv, /2026-12/);
   assert.match(csv, /2027-01/);
   assert.match(csv, /2027-02/);
@@ -107,6 +126,8 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
         configVersion: 'seven-step-source',
       },
   );
+  const months = frame.getByLabel('评估月份选择', { exact: true });
+  const originalMonth = await months.inputValue();
   await frame.locator('body').page().clock.setFixedTime(new Date('2026-10-15T12:00:00+08:00'));
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新建评估版本' });
@@ -133,7 +154,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   await frame.getByRole('button', { name: '保存调整', exact: true }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
   await expectWorkflowExportValue(frame, '郑州 A 2026-10 期初库存 计算过程', '800');
-  await frame.getByLabel('评估版本选择').selectOption('local-1');
+  await months.selectOption(originalMonth);
   await expect(
     frame.getByRole('button', { name: '郑州 A 2026-10 期初库存 计算过程', exact: true }),
   ).toHaveCount(0);
@@ -180,8 +201,8 @@ test('Tab1 is read only and leaf edits cancel or save atomically at either width
     ),
   });
   const matrix = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
-  const selected = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
-  const month = selected.match(/\d{4}-\d{2}/)[0];
+  const month = await frame.getByLabel('评估月份选择').inputValue();
+  const actions = frame.locator('.dc-adjustment-actions');
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '叶子提报.csv',
     mimeType: 'text/csv',
@@ -201,7 +222,7 @@ test('Tab1 is read only and leaf edits cancel or save atomically at either width
       (width) => (document.getElementById('root').style.width = `${width + 520}px`),
       width,
     );
-    await leafView.getByRole('button', { name: '调整', exact: true }).click();
+    await actions.getByRole('button', { name: '调整', exact: true }).click();
     await expect(leafView.locator('tbody input')).toHaveCount(8);
     await expect(leafView.locator('tbody input').first()).toBeFocused();
     await expect(frame.getByLabel('评估版本选择')).toBeDisabled();
@@ -209,26 +230,26 @@ test('Tab1 is read only and leaf edits cancel or save atomically at either width
     await leafView.getByLabel(`汤圆 组 A 郑州 ${month} 需求数量`, { exact: true }).fill('100');
     await leafView.getByLabel(`水饺 组 B 郑州 ${month} 需求数量`, { exact: true }).fill('200');
     assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), original);
-    await leafView.getByRole('button', { name: '保存调整', exact: true }).click();
-    await expect(leafView.getByRole('alert')).toContainText('原因');
-    await expect(leafView.getByLabel('批量调整原因', { exact: true })).toBeFocused();
+    await actions.getByRole('button', { name: '保存调整', exact: true }).click();
+    await expect(actions.getByRole('alert')).toContainText('原因');
+    await expect(actions.getByLabel('批量调整原因', { exact: true })).toBeFocused();
     if (width === 600)
-      await leafView.getByRole('button', { name: '取消', exact: true }).press('Enter');
-    else await leafView.getByLabel('批量调整原因', { exact: true }).press('Escape');
+      await actions.getByRole('button', { name: '取消', exact: true }).press('Enter');
+    else await actions.getByLabel('批量调整原因', { exact: true }).press('Escape');
     await expect(leafView.locator('tbody input')).toHaveCount(0);
-    await expect(leafView.getByRole('button', { name: '调整', exact: true })).toBeFocused();
+    await expect(actions.getByRole('button', { name: '调整', exact: true })).toBeFocused();
     await expect(frame.getByLabel('评估版本选择')).toBeEnabled();
     assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), original);
   }
-  await leafView.getByRole('button', { name: '调整', exact: true }).click();
+  await actions.getByRole('button', { name: '调整', exact: true }).click();
   await leafView.getByLabel(`汤圆 组 A 郑州 ${month} 需求数量`, { exact: true }).fill('100.375');
   await leafView.getByLabel(`水饺 组 B 郑州 ${month} 需求数量`, { exact: true }).fill('-1');
-  await selectAdjustmentReason(leafView, '批量校验');
-  await leafView.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(leafView.getByRole('alert')).toContainText('水饺');
+  await selectAdjustmentReason(frame, '批量校验');
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(actions.getByRole('alert')).toContainText('水饺');
   assert.deepEqual(await page.evaluate(() => window.readView().localDrafts), original);
   await leafView.getByLabel(`水饺 组 B 郑州 ${month} 需求数量`, { exact: true }).fill('200.125');
-  await leafView.getByRole('button', { name: '保存调整', exact: true }).click();
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
   await expect(leafView.locator('tbody input')).toHaveCount(0);
   await expect
     .poll(() =>

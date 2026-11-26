@@ -116,7 +116,7 @@ test('长表弹窗滚动后表头贴齐正文顶端，横向滚动和关闭保�
   await expect(dialog).toHaveCount(0);
 });
 
-test('源明细保留吸顶和键盘横滚，表单和说明弹窗保留留白及操作区', async (t) => {
+test('源明细保留吸顶和键盘横滚，表单弹窗保留留白及操作区', async (t) => {
   const page = await authorPage(t, { time: '2026-11-18T13:30:00+08:00' });
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
@@ -171,7 +171,7 @@ test('源明细保留吸顶和键盘横滚，表单和说明弹窗保留留白�
   await page.evaluate(() => {
     document.querySelector('#root').style.cssText = 'width:100%;height:100%;margin-left:0';
   });
-  for (const title of ['新建评估版本', '版本对比', '页面说明']) {
+  for (const title of ['新建评估版本', '版本对比']) {
     await frame.getByRole('button', { name: title, exact: true }).click();
     const dialog = frame.getByRole('dialog', { name: title, exact: true });
     const padding = await dialog.locator('.dc-dialog-body').evaluate((element) => {
@@ -184,8 +184,13 @@ test('源明细保留吸顶和键盘横滚，表单和说明弹窗保留留白�
     });
     assert.equal(padding, 20);
     await expect(dialog.getByRole('button', { name: '关闭弹窗', exact: true })).toBeVisible();
-    if (title === '新建评估版本')
+    await expect(dialog.getByRole('button', { name: /^关闭(?:弹窗)?$/ })).toHaveCount(1);
+    if (title === '新建评估版本') {
+      await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeVisible();
       await expect(dialog.getByRole('button', { name: '创建本地版本', exact: true })).toBeVisible();
+    } else {
+      await expect(dialog.locator('.dc-dialog-footer')).toHaveCount(0);
+    }
     await capture(page, `narrow-${title}`);
     await dialog.press('Escape');
     await expect(dialog).toHaveCount(0);
@@ -194,7 +199,8 @@ test('源明细保留吸顶和键盘横滚，表单和说明弹窗保留留白�
 
 test('主数据弹窗嵌套表格保留吸顶、键盘横滚和固定下载操作', async (t) => {
   const { page, frame } = await fixture(t);
-  await frame.getByRole('button', { name: '数据源', exact: true }).click();
+  await frame.getByRole('region', { name: '产品明细', exact: true }).locator('summary').click();
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
   const master = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
   await expect(master.getByRole('row'))
     .toHaveCount(26)
@@ -250,13 +256,13 @@ test('弹窗卸载不抢走父窗口或后来打开弹窗的焦点', async (t) =
 
   await trigger.focus();
   await trigger.press('Enter');
-  await frame.getByRole('button', { name: '页面说明', exact: true }).dispatchEvent('click');
-  const help = frame.getByRole('dialog', { name: '页面说明', exact: true });
-  const helpClose = help.getByRole('button', { name: '关闭弹窗', exact: true });
-  await expect(helpClose).toBeFocused();
+  await frame.getByRole('button', { name: '版本对比', exact: true }).dispatchEvent('click');
+  const compare = frame.getByRole('dialog', { name: '版本对比', exact: true });
+  const compareClose = compare.getByRole('button', { name: '关闭弹窗', exact: true });
+  await expect(compareClose).toBeFocused();
   await close.dispatchEvent('click');
   await expect(dialog).toHaveCount(0);
-  await expect(helpClose).toBeFocused();
-  await help.press('Escape');
-  await expect(help).toHaveCount(0);
+  await expect(compareClose).toBeFocused();
+  await compare.press('Escape');
+  await expect(compare).toHaveCount(0);
 });

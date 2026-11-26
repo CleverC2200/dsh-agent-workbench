@@ -1,3 +1,4 @@
+import { renderTablePagination } from './report-page.js';
 import { matchesCategories } from './category-filter.js';
 export function delistedReportIssues(rows, context) {
   return rows
@@ -131,25 +132,16 @@ export function createDelistedReport(react, { downloadCsv }) {
     }));
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(rows.length / 25) - 1));
     const title = '下市品需求与库存报告';
+    const download = h(
+      'button',
+      {
+        className: 'mps-download',
+        disabled: !rows.length,
+        onClick: () => downloadCsv(`${draft.month}-下市品异常明细.csv`, columns, rows),
+      },
+      '下载下市品异常明细',
+    );
     const content = [
-      h(
-        'div',
-        { className: 'dc-card-head' },
-        !collapsible && h('h3', null, title),
-        h(
-          'button',
-          {
-            disabled: !rows.length,
-            onClick: () => downloadCsv(`${draft.month}-下市品异常明细.csv`, columns, rows),
-          },
-          '下载下市品异常明细',
-        ),
-      ),
-      h(
-        'p',
-        { className: 'dc-card-note' },
-        '自动新增需求和补货从评估当月起停止。已有人工正需求保留有效状态，是否停止由人决定。第二步结存和已维护的后续调拨继续承接；独立未来生产及在途计划来源尚未接入。',
-      ),
       rows.length
         ? react.cloneElement(
             table(
@@ -167,27 +159,13 @@ export function createDelistedReport(react, { downloadCsv }) {
           )
         : h('p', { role: 'status', className: 'dc-card-note' }, '当前范围无下市品异常。'),
       rows.length > 25 &&
-        h(
-          'div',
-          { className: 'dc-toolbar' },
-          h(
-            'button',
-            {
-              disabled: pageIndex === 0,
-              onClick: () => setPage(pageIndex - 1),
-            },
-            '上一页下市品异常',
-          ),
-          h('span', null, `第${pageIndex + 1}页，共${rows.length}条`),
-          h(
-            'button',
-            {
-              disabled: (pageIndex + 1) * 25 >= rows.length,
-              onClick: () => setPage(pageIndex + 1),
-            },
-            '下一页下市品异常',
-          ),
-        ),
+        renderTablePagination(h, {
+          label: '下市品异常',
+          page: pageIndex,
+          total: rows.length,
+          onPageChange: setPage,
+          buttonLabels: ['上一页下市品异常', '下一页下市品异常'],
+        }),
     ];
     return h(
       'section',
@@ -195,11 +173,22 @@ export function createDelistedReport(react, { downloadCsv }) {
       collapsible
         ? h(
             'details',
-            { className: 'wf-exception-report', open: true },
+            { className: 'wf-exception-report mps-report-details', open: true },
             h('summary', null, title),
+            download,
             ...content,
           )
-        : content,
+        : h(
+            react.Fragment,
+            null,
+            h(
+              'div',
+              { className: 'dc-card-head mps-report-heading' },
+              h('h3', null, title),
+              download,
+            ),
+            ...content,
+          ),
     );
   };
 }

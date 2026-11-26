@@ -1,3 +1,5 @@
+import { downloadWorkbook } from './workbook.js';
+import { renderTablePagination } from './report-page.js';
 import { createCapacityScopeView } from './capacity-scope-view.js';
 import { delistedDownloadColumns, delistedDownloadFields } from './delisted-report.js';
 import { useStepViewField } from './step-view-state.js';
@@ -10,6 +12,8 @@ import {
 } from './inventory-target-view.js';
 
 const valid = (value) => typeof value === 'number' && Number.isFinite(value);
+const displayValue = (row, field) =>
+  field === 'mainPlan' && row.mainPlan === 0 && row.planMissing.length ? null : row[field];
 const reportMissing = (row) => row.reportMissing ?? row.planMissing;
 const reportStatus = (row) => {
   const missing = reportMissing(row).join('；');
@@ -138,7 +142,7 @@ export function planContext(plan, visible, { base, month }) {
 
 export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
   const CapacityReport = createCapacityReport(react, { downloadCsv, Dialog });
-  const CapacityScopeView = createCapacityScopeView(react, downloadCsv);
+  const CapacityScopeView = createCapacityScopeView(react);
   const h = react.createElement;
   const plannedFields = [
     'demand',
@@ -162,8 +166,8 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     '实际期末库存',
     '未满足供应量',
   ];
-  const known = (rows, field) => {
-    const values = rows.map((row) => row[field]).filter(valid);
+  const known = (rows, read) => {
+    const values = rows.map(read).filter(valid);
     return {
       value: values.length ? values.reduce((sum, value) => sum + value, 0) : null,
       missing: rows.length - values.length,
@@ -174,11 +178,14 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
     step,
     draft,
     currentEvaluation,
+    storageError,
+    loadingSavedResult,
     stale,
     executing,
     preparingInputs = false,
     error,
     onExecute,
+    getReferenceSheet,
     filters,
     table,
     card,
@@ -401,7 +408,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             推算口径: demandBasisLabel(festival, scope.month),
             ...Object.fromEntries(
               plannedFields.flatMap((field, index) => {
-                const data = known(entry.rows, field);
+                const data = known(entry.rows, (row) => row[field]);
                 return [
                   [labels[index], data.value],
                   [`${labels[index]}待补数`, data.missing],
@@ -416,7 +423,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         ),
       );
     const metric = (rows, field) => {
-      const data = known(rows, field);
+      const data = known(rows, (row) => displayValue(row, field));
+      if (field === 'mainPlan' && data.value === null)
+        return h('span', { className: 'wf-result-pending' }, '待评估');
       return h(
         'span',
         {
@@ -437,68 +446,62 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         react.Fragment,
         null,
         table(name, columns, rows.slice(page * 25, (page + 1) * 25).map(render)),
-        h(
-          'div',
-          { className: 'wf-plan-pagination' },
-          h('span', null, `共${rows.length}条 · 每页25条 · 第${page + 1}页`),
-          h(
-            'button',
-            {
-              disabled: page === 0,
-              onClick: () => setDetailPages({ ...detailPages, [key]: page - 1 }),
-            },
-            '上一页',
-          ),
-          h(
-            'button',
-            {
-              disabled: (page + 1) * 25 >= rows.length,
-              onClick: () => setDetailPages({ ...detailPages, [key]: page + 1 }),
-            },
-            '下一页',
-          ),
-        ),
+        renderTablePagination(h, {
+          label: name,
+          page,
+          total: rows.length,
+          onPageChange: (next) => setDetailPages({ ...detailPages, [key]: next }),
+        }),
       );
     };
     const disclosure = (name, count, body) =>
       h(
         'details',
         {
-          className: 'wf-plan-disclosure',
+          className: 'wf-plan-disclosure mps-report-details',
           open: Boolean(expanded[name]),
           onToggle: (event) => {
             if (event.target === event.currentTarget)
               setExpanded((value) => ({ ...value, [name]: event.currentTarget.open }));
           },
         },
-        h('summary', null, name, h('span', null, `${count}条`)),
+        h(
+          'summary',
+          null,
+          name,
+          count === null ? null : h('span', { className: 'dc-count' }, `${count}条`),
+        ),
         expanded[name] ? body() : null,
       );
     const active = Boolean(plan?.summary.totalRows && !stale && !executing && !error);
-    const status = preparingInputs
-      ? '正在准备需求、发货与库存输入'
-      : executing
-        ? '正在评估当前版本'
-        : error
-          ? error.includes('已取消')
-            ? '本轮评估已取消，请重新评估'
-            : '本次评估失败，上次结果仅供参考'
-          : !plan
-            ? '尚未评估'
-            : stale
-              ? '输入已变化，需重新评估'
-              : plan.partial && plan.status === 'complete'
-                ? '参与范围内已完成求解，待定单品仍需补齐'
-                : plan.status === 'complete'
-                  ? '已完成求解'
-                  : plan.summary.evaluatedRows
-                    ? '部分可评估，缺项已单列'
-                    : plan.summary.totalRows
-                      ? '暂无单品月份满足排产条件，缺项待补'
-                      : '缺需求单品范围，尚未生成排产';
+    const waitingForFirstResult = preparingInputs && !plan;
+    const status = loadingSavedResult
+      ? '正在读取上次评估结果'
+      : waitingForFirstResult
+        ? '正在准备需求、发货与库存输入'
+        : executing
+          ? '正在评估当前版本'
+          : error
+            ? error.includes('已取消')
+              ? '本轮评估已取消，请重新评估'
+              : plan
+                ? '本次评估失败，当前展示上次结果'
+                : '本次评估失败'
+            : !plan
+              ? '尚未评估'
+              : stale
+                ? '输入已变化，需重新评估'
+                : plan.partial && plan.status === 'complete'
+                  ? '参与范围内已完成求解，待定单品仍需补齐'
+                  : plan.status === 'complete'
+                    ? '已完成求解'
+                    : plan.summary.evaluatedRows
+                      ? '部分可评估，缺项已单列'
+                      : plan.summary.totalRows
+                        ? '暂无单品月份满足排产条件，缺项待补'
+                        : '缺需求单品范围，尚未生成排产';
     const exportPlan = () => {
-      if (!active) return;
-      const rows = reportRows.map((row) => ({
+      const rows = (active ? reportRows : []).map((row) => ({
         评估版本: draft.name,
         计算范围: plan.partial ? '部分可计算，待定单品已排除' : '当前参与范围',
         排除单品记录数: plan.excludedShipments?.length ?? 0,
@@ -518,10 +521,6 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         替换品历史源记录数: row.historyReferenceRows,
         历史合计数量: row.historyQuantity,
         替换系数: row.historyCode ? (row.historyFactor === undefined ? 1 : row.historyFactor) : '',
-        历史参考口径:
-          row.historyCode && row.historyCode !== row.code
-            ? '同基地自身历史＋替换品历史×替换系数；同码一次、不递归'
-            : '自身历史，同码只计一次',
         ...Object.fromEntries(plannedFields.map((field, index) => [labels[index], row[field]])),
         ...delistedDownloadFields(row),
         期初库存来源: row.openingInventorySource,
@@ -549,49 +548,55 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           ),
         ].join('；'),
       }));
-      downloadCsv(
-        `${draft.month}-${step === 'report' ? '产销存结果' : '求解结果'}.csv`,
-        [
-          '评估版本',
-          '计算范围',
-          '排除单品记录数',
-          '结果时间',
-          '月份',
-          ...(festival ? ['推算口径'] : []),
-          '基地',
-          '大类',
-          '系列',
-          '物料组',
-          '产品编码',
-          '产品名称',
-          '历史参考物料编码',
-          '历史源数量',
-          '自身历史源数量',
-          '自身历史源记录数',
-          '替换品历史源记录数',
-          '历史合计数量',
-          '替换系数',
-          '历史参考口径',
-          ...labels,
-          ...delistedDownloadColumns,
-          '期初库存来源',
-          '既有库存变动来源',
-          '需求已满足量',
-          'ODM默认计划到货吨数',
-          'ODM估算说明',
-          '供应满足率',
-          '有效目标周转天数',
-          '周转天数口径',
-          '源目标周转天数',
-          ...inventoryDependencyColumns,
-          '状态',
-          '问题分类',
-          '来源标签',
-          '标签所属月',
-          '异常说明',
-          '需人工补齐',
-        ],
-        rows,
+      const sheets = [];
+      if (rows.length)
+        sheets.push({
+          name: step === 'report' ? '产销存结果' : '求解结果',
+          columns: [
+            '评估版本',
+            '计算范围',
+            '排除单品记录数',
+            '结果时间',
+            '月份',
+            ...(festival ? ['推算口径'] : []),
+            '基地',
+            '大类',
+            '系列',
+            '物料组',
+            '产品编码',
+            '产品名称',
+            '历史参考物料编码',
+            '历史源数量',
+            '自身历史源数量',
+            '自身历史源记录数',
+            '替换品历史源记录数',
+            '历史合计数量',
+            '替换系数',
+            ...labels,
+            ...delistedDownloadColumns,
+            '期初库存来源',
+            '既有库存变动来源',
+            '需求已满足量',
+            'ODM默认计划到货吨数',
+            'ODM估算说明',
+            '供应满足率',
+            '有效目标周转天数',
+            '周转天数口径',
+            '源目标周转天数',
+            ...inventoryDependencyColumns,
+            '状态',
+            '问题分类',
+            '来源标签',
+            '标签所属月',
+            '异常说明',
+            '需人工补齐',
+          ],
+          rows,
+        });
+      if (getReferenceSheet) sheets.push(getReferenceSheet());
+      return downloadWorkbook(
+        `${draft.month}-${step === 'report' ? '产销存结果' : '求解结果'}.xlsx`,
+        sheets,
       );
     };
     const formula = (row, field) => {
@@ -620,8 +625,18 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           onClick: () => formula(row, field),
           'aria-label': `${row.base} ${row.code} ${row.month} ${labels[plannedFields.indexOf(field)]} 求解过程`,
         },
-        numberText(row[field]),
+        field === 'mainPlan' && displayValue(row, field) === null
+          ? '待评估'
+          : numberText(row[field]),
       );
+    const reportColumnHeading = (name) =>
+      name === 'ODM默认计划到货量'
+        ? h(
+            'span',
+            { className: 'wf-odm-arrival-label', title: '按净缺口估算，实际到货待核' },
+            name,
+          )
+        : name;
     const detail = (rows, key, national) => {
       const selection = detailSelection[key] ?? {};
       const categories = [...new Set(rows.map((row) => row.category || '分类待补'))];
@@ -736,11 +751,23 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
               }),
             ),
           ),
-          h('span', null, `${selected.length}个单品`),
+          h(
+            'span',
+            null,
+            `${numberText(new Set(selected.map((entry) => entry.code)).size)} 个去重单品`,
+          ),
         ),
         table(
           '求解单品明细',
-          ['粒度', '大类', '物料组', '产品编码', '产品名称', ...labels, '状态'],
+          [
+            '粒度',
+            '大类',
+            '物料组',
+            '产品编码',
+            '产品名称',
+            ...labels.map(reportColumnHeading),
+            '状态',
+          ],
           visible.map((entry) => [
             entry.level,
             entry.level === '大类' ? disclosure(entry, entry.category) : entry.category,
@@ -758,7 +785,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         h(
           'div',
           { className: 'dc-card-foot' },
-          `共${selected.length}个单品 · 已展开${visible.filter((entry) => entry.level === 'SKU').length}个单品`,
+          `已展开 ${numberText(new Set(visible.filter((entry) => entry.level === 'SKU').map((entry) => entry.code)).size)} 个去重单品`,
         ),
       );
     };
@@ -768,12 +795,6 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         h(
           react.Fragment,
           null,
-          h('p', { className: 'wf-note' }, '单位：件。带 * 的数值为已知小计，缺项在状态列标注。'),
-          h(
-            'button',
-            { type: 'button', disabled: !active, onClick: downloadBalanceLevels },
-            '下载产销存分层汇总及明细',
-          ),
           h(
             'div',
             {
@@ -792,7 +813,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                   'tr',
                   null,
                   ['计划月', '基地', ...labels, '状态 / 明细'].map((name) =>
-                    h('th', { key: name, scope: 'col' }, name),
+                    h('th', { key: name, scope: 'col' }, reportColumnHeading(name)),
                   ),
                 ),
               ),
@@ -826,9 +847,9 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                               'span',
                               { className: 'wf-plan-row-status' },
                               missing
-                                ? `${missing}个单品待补`
+                                ? `${numberText(missing)} 条基地 SKU 待补`
                                 : shortage
-                                  ? `${shortage}个单品有缺口`
+                                  ? `${numberText(shortage)} 条基地 SKU 有缺口`
                                   : '已评估',
                             ),
                             h(
@@ -842,7 +863,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                                     : undefined,
                                 onClick: () => setReportOpen(reportOpen === key ? null : key),
                               },
-                              `${reportOpen === key ? '收起' : '展开'} ${group.rows.length}个单品`,
+                              `${reportOpen === key ? '收起' : '展开'} ${numberText(group.rows.length)} 条基地 SKU 记录`,
                             ),
                           ),
                         ),
@@ -877,6 +898,261 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
             ),
           ),
         ),
+        h(
+          'div',
+          { className: 'mps-report-actions' },
+          h(
+            'span',
+            { className: 'dc-card-note' },
+            reportGroups.some(({ rows }) =>
+              plannedFields.some((field) => {
+                const summary = known(rows, (row) => displayValue(row, field));
+                return summary.missing > 0 && summary.value !== null;
+              }),
+            )
+              ? '单位：件 · * 已知小计'
+              : '单位：件',
+          ),
+          h(
+            'button',
+            {
+              className: 'mps-download',
+              type: 'button',
+              disabled: !active || !reportGroups.length,
+              onClick: downloadBalanceLevels,
+            },
+            '下载产销存分层汇总及明细',
+          ),
+        ),
+      );
+
+    const capacityScope = () =>
+      h(CapacityScopeView, {
+        plan,
+        month: filters.month || plan.capacityReport?.referenceMonth,
+        filters,
+        view,
+        active,
+        card,
+        table,
+        numberText,
+      });
+    const issueCounts = Map.groupBy(issues, (row) => row.kind);
+    const problems = () =>
+      card(
+        '问题分类与补充清单',
+        h(
+          react.Fragment,
+          null,
+          issueCounts.size
+            ? h(
+                'ul',
+                { className: 'wf-issue-summary', 'aria-label': '当前筛选的问题分类' },
+                issueKinds
+                  .filter((kind) => issueCounts.has(kind))
+                  .map((kind) =>
+                    h(
+                      'li',
+                      { key: kind },
+                      h('span', null, kind),
+                      h('strong', null, numberText(issueCounts.get(kind).length)),
+                    ),
+                  ),
+              )
+            : h('p', { className: 'wf-note' }, '当前筛选没有分类问题。'),
+          causeGroups.length
+            ? disclosure('查看大类需求上游原因', causes.length, () =>
+                h(
+                  react.Fragment,
+                  null,
+                  paginate(
+                    '大类需求上游组',
+                    ['上游原因组', '需求月份', '大类', '上游原因数'],
+                    causeGroups,
+                    'classifiedCauseGroups',
+                    (group) => [group.id, group.month, group.category, group.causeIds.length],
+                  ),
+                  h(
+                    'label',
+                    null,
+                    '上游原因组',
+                    h(
+                      'select',
+                      {
+                        'aria-label': '上游原因组筛选',
+                        value: selectedCauseGroup?.id ?? '',
+                        onChange: (event) => {
+                          setCauseGroupId(event.target.value);
+                          setDetailPages((value) => ({ ...value, classifiedCauses: 0 }));
+                        },
+                      },
+                      h('option', { value: '' }, '全部'),
+                      causeGroups.map((group) =>
+                        h('option', { key: group.id, value: group.id }, group.id),
+                      ),
+                    ),
+                  ),
+                  paginate(
+                    '大类需求上游原因',
+                    ['上游原因编号', '源值与证据'],
+                    displayedCauses,
+                    'classifiedCauses',
+                    (cause) => [cause.id, cause.reason],
+                  ),
+                ),
+              )
+            : null,
+          disclosure('查看分类问题明细', issues.length, () =>
+            h(
+              react.Fragment,
+              null,
+              h(
+                'label',
+                null,
+                '问题分类',
+                h(
+                  'select',
+                  {
+                    'aria-label': '问题分类筛选',
+                    value: issueKind,
+                    onChange: (event) => {
+                      setIssueKind(event.target.value);
+                      setDetailPages((value) => ({ ...value, classifiedIssues: 0 }));
+                    },
+                  },
+                  h('option', { value: '' }, '全部'),
+                  issueKinds.map((kind) => h('option', { key: kind, value: kind }, kind)),
+                ),
+              ),
+              paginate(
+                '分类问题明细',
+                [
+                  '需求月份',
+                  '问题分类',
+                  '基地',
+                  '产品编码',
+                  '产品名称',
+                  '上游原因组',
+                  '来源标签 / 所属月',
+                  '源值与证据',
+                  '源表 / 字段',
+                  '核对处理',
+                ],
+                selectedIssues,
+                'classifiedIssues',
+                (row) => [
+                  row.month,
+                  row.kind,
+                  row.base,
+                  row.code,
+                  row.name,
+                  row.causeGroupId,
+                  `${row.tags || '未提供'} / ${row.sourceMonth || '未提供'}`,
+                  row.reason,
+                  `${row.sourceTable} / ${row.sourceFields}`,
+                  row.action,
+                ],
+              ),
+            ),
+          ),
+        ),
+        h(
+          'button',
+          {
+            className: 'mps-download',
+            disabled: !active || !(selectedIssues.length || causeGroups.length || causes.length),
+            onClick: () =>
+              downloadCsv(
+                `${draft.month}-分类问题清单.csv`,
+                [
+                  '评估版本',
+                  '结果时间',
+                  '粒度',
+                  '大类',
+                  '上游原因组',
+                  '上游原因编号',
+                  '上游原因数',
+                  '需求月份',
+                  '基地',
+                  '产品编码',
+                  '产品名称',
+                  '问题分类',
+                  '来源标签',
+                  '标签所属月',
+                  '需求数量',
+                  '源表',
+                  '字段',
+                  '原始值',
+                  '计算用值',
+                  '源值与证据',
+                  '核对处理',
+                  '处理性质',
+                  '根因月份',
+                  '根因链',
+                  '根因源表',
+                  '根因字段',
+                ],
+                [
+                  ...selectedIssues.map((row) => ({
+                    评估版本: draft.name,
+                    结果时间: stamp,
+                    粒度: '基地SKU问题',
+                    大类: row.productCategory,
+                    上游原因组: row.causeGroupId,
+                    需求月份: row.month,
+                    基地: row.base,
+                    产品编码: row.code,
+                    产品名称: row.name,
+                    问题分类: row.kind,
+                    来源标签: row.tags,
+                    标签所属月: row.sourceMonth,
+                    需求数量: row.demand,
+                    源表: row.sourceTable,
+                    字段: row.sourceFields,
+                    原始值: row.rawValue === null ? '缺失或无效' : row.rawValue,
+                    计算用值: row.calculationValue,
+                    源值与证据: row.reason,
+                    核对处理: row.action,
+                    根因月份: row.rootMonth,
+                    根因链: row.rootCause,
+                    根因源表: row.rootSourceTable,
+                    根因字段: row.rootSourceFields,
+                    处理性质: row.blocking
+                      ? '仅影响对应基地SKU月份，补齐后重算'
+                      : row.kind === '负库存归零'
+                        ? '库存计算用值已归0；原始不足及修正历史保留'
+                        : row.kind === '拆分依据待补'
+                          ? '来源缺项提示，不阻断当前零需求'
+                          : row.kind === '缺件吨系数'
+                            ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
+                            : row.kind === '下市品停止自动补货'
+                              ? '自动新增需求及补货已停止，库存继续滚动'
+                              : row.kind === '下市品日均缺失'
+                                ? '仅日均计算补0，来源状态保留'
+                                : '有效人工正需求保留，由人决定是否停用',
+                  })),
+                  ...causeGroups.map((group) => ({
+                    评估版本: draft.name,
+                    结果时间: stamp,
+                    粒度: '大类需求上游组',
+                    需求月份: group.month,
+                    大类: group.category,
+                    上游原因组: group.id,
+                    上游原因数: group.causeIds.length,
+                  })),
+                  ...causes.map((cause) => ({
+                    评估版本: draft.name,
+                    结果时间: stamp,
+                    粒度: '大类需求上游原因',
+                    上游原因组: groupsByCause.get(cause.id).join('；'),
+                    上游原因编号: cause.id,
+                    源值与证据: cause.reason,
+                  })),
+                ],
+              ),
+          },
+          '导出分类问题清单',
+        ),
       );
 
     return h(
@@ -889,32 +1165,33 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
           {
             className: 'wf-plan-toolbar',
             'data-state':
-              !plan || stale || error || !plan.summary.evaluatedRows
-                ? 'pending'
-                : plan.partial
-                  ? 'partial'
-                  : plan.status === 'complete'
-                    ? 'complete'
-                    : 'partial',
+              loadingSavedResult || waitingForFirstResult || executing
+                ? 'loading'
+                : error
+                  ? 'error'
+                  : !plan || stale || !plan.summary.evaluatedRows
+                    ? 'pending'
+                    : plan.partial || plan.status !== 'complete'
+                      ? 'partial'
+                      : 'complete',
           },
           h(
             'div',
             { className: 'wf-plan-status', role: 'status' },
             h('strong', null, status),
-            h(
-              'span',
-              null,
-              stamp
-                ? `生成于 ${stamp} · 满足排产条件 ${plan.summary.evaluatedRows}/${plan.summary.totalRows} 个单品月份`
-                : '按当前版本的数据与约束执行评估',
-            ),
+            stamp &&
+              h(
+                'span',
+                null,
+                `${stale || error ? '上次生成' : '生成时间'} ${stamp} · 已评估 ${plan.summary.evaluatedRows}/${plan.summary.totalRows} 个单品月份`,
+              ),
           ),
           step === 'capacity'
             ? h(
                 'button',
                 {
                   className: 'dc-primary',
-                  disabled: executing || preparingInputs,
+                  disabled: loadingSavedResult || executing || preparingInputs,
                   onClick: onExecute,
                 },
                 preparingInputs
@@ -926,361 +1203,98 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
                       : '执行评估',
               )
             : null,
+        ),
+        h(
+          'div',
+          { className: 'mps-report-actions' },
           h(
             'button',
-            { disabled: !active, onClick: exportPlan },
-            step === 'capacity' ? '导出求解结果' : '导出产销存结果',
+            {
+              className: 'mps-download',
+              disabled: !getReferenceSheet && (!active || !reportRows.length),
+              onClick: exportPlan,
+            },
+            (!active || !reportRows.length) && getReferenceSheet
+              ? '下载需求推导参考'
+              : step === 'capacity'
+                ? '导出求解结果'
+                : '导出产销存结果',
           ),
         ),
       ),
       error ? h('p', { role: 'alert' }, error) : null,
-      plan && !stale && !executing && !error
-        ? h(
-            'p',
-            { className: 'wf-note' },
-            '输入齐备的单品继续排产并汇总已知结果；缺项保留在对应基地、SKU和月份，未取得的数据不计为0。请按问题清单补齐后重新评估。',
-          )
-        : null,
+      storageError ? h('p', { role: 'alert' }, storageError) : null,
       plan?.rows.some((row) => row.safetyDaysSource === 'missing-turnover-days-zero')
         ? h(
             'p',
             { className: 'wf-note', role: 'status' },
-            `本轮${plan.rows.filter((row) => row.safetyDaysSource === 'missing-turnover-days-zero').length}个单品月份缺源目标周转天数，临时按0天计算目标库存，源缺项保留在第五步待补清单，补齐后重新评估。`,
+            `本轮${plan.rows.filter((row) => row.safetyDaysSource === 'missing-turnover-days-zero').length}个单品月份暂按 0 天计算目标库存，可在第 5 步补齐。`,
           )
         : null,
       !plan
-        ? h(
-            'p',
-            { className: 'wf-note' },
-            step === 'capacity'
-              ? (draft.resources ?? []).some((row) => row.kind === 'forming')
-                ? '执行评估使用隧道及显式配置的成型机、件吨系数、生产日历和合法调拨路径。已配置的设备共同限制同一产量，缺项按单品列出。'
-                : '执行评估使用隧道产能、件吨系数、生产日历及合法调拨路径，按公平满足率分配；缺项按单品列出，其他有效范围继续计算。'
-              : '请先在第六步执行评估。本页只展示同一份求解结果，不独立计算。',
-          )
-        : h(
-            react.Fragment,
-            null,
-            h(CapacityScopeView, {
-              plan,
-              month: filters.month || plan.capacityReport?.referenceMonth,
-              filters,
-              view,
-              active,
-              card,
-              table,
-              numberText,
-            }),
-            step === 'capacity'
-              ? h(CapacityReport, {
-                  view,
-                  plan,
-                  draft,
-                  stamp,
-                  filters,
-                  card,
-                  table,
-                  numberText,
-                  active,
-                })
-              : null,
-            card(
-              '问题分类与补充清单',
-              h(
-                react.Fragment,
-                null,
-                h(
-                  'p',
-                  { className: 'wf-note' },
-                  issueKinds
-                    .map((kind) => `${kind} ${issues.filter((row) => row.kind === kind).length}项`)
-                    .join('；'),
-                ),
-                h(
-                  'button',
-                  {
-                    disabled: !active,
-                    onClick: () =>
-                      downloadCsv(
-                        `${draft.month}-分类问题清单.csv`,
-                        [
-                          '评估版本',
-                          '结果时间',
-                          '粒度',
-                          '大类',
-                          '上游原因组',
-                          '上游原因编号',
-                          '上游原因数',
-                          '需求月份',
-                          '基地',
-                          '产品编码',
-                          '产品名称',
-                          '问题分类',
-                          '来源标签',
-                          '标签所属月',
-                          '需求数量',
-                          '源表',
-                          '字段',
-                          '原始值',
-                          '计算用值',
-                          '源值与证据',
-                          '核对处理',
-                          '处理性质',
-                          '根因月份',
-                          '根因链',
-                          '根因源表',
-                          '根因字段',
-                        ],
-                        [
-                          ...selectedIssues.map((row) => ({
-                            评估版本: draft.name,
-                            结果时间: stamp,
-                            粒度: '基地SKU问题',
-                            大类: row.productCategory,
-                            上游原因组: row.causeGroupId,
-                            需求月份: row.month,
-                            基地: row.base,
-                            产品编码: row.code,
-                            产品名称: row.name,
-                            问题分类: row.kind,
-                            来源标签: row.tags,
-                            标签所属月: row.sourceMonth,
-                            需求数量: row.demand,
-                            源表: row.sourceTable,
-                            字段: row.sourceFields,
-                            原始值: row.rawValue === null ? '缺失或无效' : row.rawValue,
-                            计算用值: row.calculationValue,
-                            源值与证据: row.reason,
-                            核对处理: row.action,
-                            根因月份: row.rootMonth,
-                            根因链: row.rootCause,
-                            根因源表: row.rootSourceTable,
-                            根因字段: row.rootSourceFields,
-                            处理性质: row.blocking
-                              ? '仅影响对应基地SKU月份，补齐后重算'
-                              : row.kind === '负库存归零'
-                                ? '库存计算用值已归0；原始不足及修正历史保留'
-                                : row.kind === '拆分依据待补'
-                                  ? '来源缺项提示，不阻断当前零需求'
-                                  : row.kind === '缺件吨系数'
-                                    ? '来源缺项提示，不阻断当前件数计划；吨数报告待补'
-                                    : row.kind === '下市品停止自动补货'
-                                      ? '自动新增需求及补货已停止，库存继续滚动'
-                                      : row.kind === '下市品日均缺失'
-                                        ? '仅日均计算补0，来源状态保留'
-                                        : '有效人工正需求保留，由人决定是否停用',
-                          })),
-                          ...causeGroups.map((group) => ({
-                            评估版本: draft.name,
-                            结果时间: stamp,
-                            粒度: '大类需求上游组',
-                            需求月份: group.month,
-                            大类: group.category,
-                            上游原因组: group.id,
-                            上游原因数: group.causeIds.length,
-                          })),
-                          ...causes.map((cause) => ({
-                            评估版本: draft.name,
-                            结果时间: stamp,
-                            粒度: '大类需求上游原因',
-                            上游原因组: groupsByCause.get(cause.id).join('；'),
-                            上游原因编号: cause.id,
-                            源值与证据: cause.reason,
-                          })),
-                        ],
-                      ),
-                  },
-                  '导出分类问题清单',
-                ),
-                causeGroups.length
-                  ? disclosure('查看大类需求上游原因', causes.length, () =>
-                      h(
-                        react.Fragment,
-                        null,
-                        h(
-                          'p',
-                          { className: 'wf-note' },
-                          '基地SKU问题按月份和大类引用上游原因组。完整原因按编号共用，导出分类问题清单保留全部组、编号及原因。',
-                        ),
-                        paginate(
-                          '大类需求上游组',
-                          ['上游原因组', '需求月份', '大类', '上游原因数'],
-                          causeGroups,
-                          'classifiedCauseGroups',
-                          (group) => [group.id, group.month, group.category, group.causeIds.length],
-                        ),
-                        h(
-                          'label',
-                          null,
-                          '上游原因组',
-                          h(
-                            'select',
-                            {
-                              'aria-label': '上游原因组筛选',
-                              value: selectedCauseGroup?.id ?? '',
-                              onChange: (event) => {
-                                setCauseGroupId(event.target.value);
-                                setDetailPages((value) => ({ ...value, classifiedCauses: 0 }));
-                              },
-                            },
-                            h('option', { value: '' }, '全部'),
-                            causeGroups.map((group) =>
-                              h('option', { key: group.id, value: group.id }, group.id),
-                            ),
-                          ),
-                        ),
-                        paginate(
-                          '大类需求上游原因',
-                          ['上游原因编号', '源值与证据'],
-                          displayedCauses,
-                          'classifiedCauses',
-                          (cause) => [cause.id, cause.reason],
-                        ),
-                      ),
-                    )
-                  : null,
-                disclosure('查看分类问题明细', issues.length, () =>
+        ? step === 'report' && h('p', { className: 'wf-note' }, '请先在第 6 步执行评估。')
+        : step === 'report'
+          ? h(
+              react.Fragment,
+              null,
+              balances(),
+              problems(),
+              disclosure('设备范围与产品占用', null, capacityScope),
+            )
+          : h(
+              react.Fragment,
+              null,
+              problems(),
+              capacityScope(),
+              h(CapacityReport, {
+                view,
+                plan,
+                draft,
+                stamp,
+                filters,
+                card,
+                table,
+                numberText,
+                active,
+              }),
+              disclosure(
+                '未覆盖缺口与公平分配',
+                demandRows.filter((row) => row.unfulfilled > 0 || row.planMissing.length).length,
+                () =>
                   h(
                     react.Fragment,
                     null,
-                    h(
-                      'label',
-                      null,
-                      '问题分类',
-                      h(
-                        'select',
-                        {
-                          'aria-label': '问题分类筛选',
-                          value: issueKind,
-                          onChange: (event) => {
-                            setIssueKind(event.target.value);
-                            setDetailPages((value) => ({ ...value, classifiedIssues: 0 }));
-                          },
-                        },
-                        h('option', { value: '' }, '全部'),
-                        issueKinds.map((kind) => h('option', { key: kind, value: kind }, kind)),
-                      ),
-                    ),
                     paginate(
-                      '分类问题明细',
+                      '求解缺口明细',
                       [
-                        '需求月份',
-                        '问题分类',
+                        '月份',
                         '基地',
-                        '产品编码',
-                        '产品名称',
-                        '上游原因组',
-                        '来源标签 / 所属月',
-                        '源值与证据',
-                        '源表 / 字段',
-                        '核对处理',
+                        '单品',
+                        '待生产需求（件）',
+                        '分配供应量（件）',
+                        '满足率',
+                        '未满足量（件）',
+                        '状态',
                       ],
-                      selectedIssues,
-                      'classifiedIssues',
-                      (row) => [
-                        row.month,
-                        row.kind,
-                        row.base,
-                        row.code,
-                        row.name,
-                        row.causeGroupId,
-                        `${row.tags || '未提供'} / ${row.sourceMonth || '未提供'}`,
-                        row.reason,
-                        `${row.sourceTable} / ${row.sourceFields}`,
-                        row.action,
-                      ],
+                      demandRows
+                        .filter((row) => row.unfulfilled > 0 || row.planMissing.length)
+                        .map((row) => [
+                          row.month,
+                          row.base,
+                          row.code,
+                          numberText(row.requiredProduction),
+                          row.fulfillment === null
+                            ? '—'
+                            : numberText((row.requiredProduction ?? 0) * row.fulfillment),
+                          numberText(row.fulfillment, true),
+                          numberText(row.unfulfilled),
+                          reportStatus(row),
+                        ]),
+                      'gaps',
                     ),
                   ),
-                ),
               ),
             ),
-            step === 'report'
-              ? h(
-                  react.Fragment,
-                  null,
-                  h(
-                    'div',
-                    { className: 'wf-plan-months' },
-                    plan.months.map((month) => {
-                      const rows = physicalRows.filter((row) => row.month === month);
-                      const total = known(rows, 'mainPlan');
-                      return h(
-                        'section',
-                        { key: month, className: 'dc-card wf-plan-month' },
-                        h('h3', null, `${month} 内部排产量`),
-                        h(
-                          'div',
-                          { className: 'wf-plan-month-value' },
-                          metric(rows, 'mainPlan'),
-                          h('span', null, '件'),
-                        ),
-                        h(
-                          'p',
-                          null,
-                          'ODM默认计划到货 ',
-                          metric(rows, 'odmArrival'),
-                          ' 件，按净缺口估算，供方实际到货未验证。',
-                        ),
-                        h(
-                          'p',
-                          null,
-                          total.missing
-                            ? `${total.missing}个单品待补，已有数据按已知小计展示`
-                            : '产能约束后的实际排产',
-                        ),
-                      );
-                    }),
-                  ),
-                  balances(),
-                )
-              : h(
-                  react.Fragment,
-                  null,
-                  disclosure(
-                    '未覆盖缺口与公平分配',
-                    demandRows.filter((row) => row.unfulfilled > 0 || row.planMissing.length)
-                      .length,
-                    () =>
-                      h(
-                        react.Fragment,
-                        null,
-                        paginate(
-                          '求解缺口明细',
-                          [
-                            '月份',
-                            '基地',
-                            '单品',
-                            '待生产需求（件）',
-                            '分配供应量（件）',
-                            '满足率',
-                            '未满足量（件）',
-                            '状态',
-                          ],
-                          demandRows
-                            .filter((row) => row.unfulfilled > 0 || row.planMissing.length)
-                            .map((row) => [
-                              row.month,
-                              row.base,
-                              row.code,
-                              numberText(row.requiredProduction),
-                              row.fulfillment === null
-                                ? '—'
-                                : numberText((row.requiredProduction ?? 0) * row.fulfillment),
-                              numberText(row.fulfillment, true),
-                              numberText(row.unfulfilled),
-                              reportStatus(row),
-                            ]),
-                          'gaps',
-                        ),
-                        h(
-                          'p',
-                          { className: 'wf-note' },
-                          '缺输入与产能不足分别标注。完整结果可导出，处置由人工评估。',
-                        ),
-                      ),
-                  ),
-                ),
-          ),
       trace
         ? h(Dialog, { title: trace.title, close: () => setTrace(null) }, h('p', null, trace.text))
         : null,

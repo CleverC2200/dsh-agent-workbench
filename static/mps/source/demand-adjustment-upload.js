@@ -105,7 +105,10 @@ export function createDemandAdjustmentUpload(react, { Upload, Dialog, parseCsv, 
         !batch.active && h(Upload, { label: '选择需求修正CSV', text: '上传需求修正', read }),
         h(
           'button',
-          { onClick: () => downloadCsv('需求修正-模板.csv', columns, []) },
+          {
+            className: 'mps-download',
+            onClick: () => downloadCsv('需求修正-模板.csv', columns, []),
+          },
           '下载需求修正模板',
         ),
         h(

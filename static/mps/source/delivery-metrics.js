@@ -1,9 +1,12 @@
+import { renderTablePagination } from './report-page.js';
 import { createDimensionCategoryMatcher } from './category-filter.js';
 import { deliveryColumns } from './source-tables.js';
 import { growthSourceAnomalies } from './growth-anomaly-report.js';
+import { createMonthPicker } from './month-picker.js';
 
 export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart }) {
   const h = react.createElement;
+  const MonthPicker = createMonthPicker(react);
   const columns = ['月份', ...Object.values(deliveryColumns), '源记录数', '粒度状态'];
   return function DeliveryMetrics({
     draft,
@@ -19,7 +22,6 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
     const [base, setBase] = react.useState('');
     const [page, setPage] = react.useState(0);
     const [pageSize, setPageSize] = react.useState(10);
-    const [expanded, setExpanded] = react.useState(false);
     const matchesDimension = react.useMemo(
       () => createDimensionCategoryMatcher(draft.products, selectedCategories),
       [draft.products, selectedCategories],
@@ -62,51 +64,25 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
     );
     return h(
       'section',
-      { className: 'dc-card', 'aria-label': '基地多维发货指标' },
+      { 'aria-label': '基地多维发货指标' },
       h(
-        'div',
-        { className: 'dc-card-head' },
-        h('h3', {}, '基地多维发货指标'),
+        'details',
+        { className: 'dc-card dc-delivery-metrics mps-report-details' },
         h(
-          'button',
-          {
-            'aria-label': `${expanded ? '收起' : '展开'}基地多维发货指标`,
-            'aria-expanded': expanded,
-            onClick: () => setExpanded(!expanded),
-          },
-          expanded ? '收起' : '展开',
+          'summary',
+          null,
+          '基地多维发货指标',
+          read?.status === 'failed' && h('span', { className: 'dc-status' }, '读取失败'),
         ),
-        h(
-          'span',
-          { className: 'dc-status' },
-          read?.status === 'ready' ? '业务来源' : read?.status === 'failed' ? '读取失败' : '待同步',
-        ),
-        h(
-          'button',
-          { disabled: !active || busy, onClick: () => sync('delivery') },
-          busy ? '同步中…' : '同步发货指标',
-        ),
-      ),
-      h(
-        'div',
-        { className: 'dc-source-body', hidden: !expanded },
         h(
           'div',
-          { className: 'dc-toolbar' },
-          h(
-            'label',
-            {},
-            '指标月份',
-            h('input', {
-              type: 'month',
-              'aria-label': '发货指标月份',
-              value: month,
-              onChange: (event) => {
-                if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value))
-                  update({ deliveryMonth: event.target.value });
-              },
-            }),
-          ),
+          { className: 'dc-toolbar dc-report-filters mps-disclosure-toolbar' },
+          h(MonthPicker, {
+            label: '发货指标月份',
+            name: 'deliveryMonth',
+            value: month,
+            onChange: (month) => update({ deliveryMonth: month }),
+          }),
           h(
             'label',
             {},
@@ -118,7 +94,7 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
                 value: selectedType,
                 onChange: (event) => setDimension(event.target.value),
               },
-              h('option', { value: '' }, '全部维度，分行核对'),
+              h('option', { value: '' }, '全部维度'),
               ...types.map((name) => h('option', { key: name, value: name }, name)),
             ),
           ),
@@ -138,64 +114,58 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
             ),
           ),
           h(
-            'button',
-            {
-              disabled: !rows.length,
-              onClick: () =>
-                downloadCsv(
-                  `基地多维发货-${month}.csv`,
-                  [...columns, '增幅异常', '读取状态'],
-                  rows.map((row) => ({
-                    ...row,
-                    增幅异常: growthSourceAnomalies([row])
-                      .map(({ metric, reason }) => `${metric}：${reason}`)
-                      .join('；'),
-                    读取状态: read?.status ?? 'unread',
-                  })),
-                ),
-            },
-            '下载当前指标',
+            'div',
+            { className: 'mps-report-actions' },
+            h(
+              'button',
+              { disabled: !active || busy, onClick: () => sync('delivery') },
+              busy ? '同步中…' : '同步发货指标',
+            ),
+            h(
+              'button',
+              {
+                className: 'mps-download',
+                disabled: !rows.length,
+                onClick: () =>
+                  downloadCsv(
+                    `基地多维发货-${month}.csv`,
+                    [...columns, '增幅异常', '读取状态'],
+                    rows.map((row) => ({
+                      ...row,
+                      增幅异常: growthSourceAnomalies([row])
+                        .map(({ metric, reason }) => `${metric}：${reason}`)
+                        .join('；'),
+                      读取状态: read?.status ?? 'unread',
+                    })),
+                  ),
+              },
+              '下载当前指标',
+            ),
           ),
         ),
-        h(
-          'p',
-          { className: 'dc-muted' },
-          '大类、系列、物料组、产品按源维度分别核对，不跨维度相加。同比、环比和月发货占财年比例直接展示源值，不替代SKU分摊占比；数量单位和比例换算待确认。',
-        ),
-        busy && h('p', { role: 'status' }, '正在读取发货指标…'),
-        error && h('p', { role: 'alert' }, error),
+        error && h('p', { role: 'alert', className: 'dc-report-message' }, error),
         read?.status !== 'ready' &&
           rows.length > 0 &&
-          h('p', {}, '下表保留上次读取证据，当前读取尚未成功，不能作为当前有效结果。'),
+          h('p', { role: 'status', className: 'dc-report-message' }, '当前显示上次读取的指标'),
         !rows.length &&
           !busy &&
-          h('p', { className: 'dc-empty' }, '当前月份尚无已读取指标，不能判定发货为零。'),
-        h(
-          'p',
-          {},
-          `当前筛选${rows.length}条，数量与比率不作跨行合计；重复键保留源记录数和粒度状态。`,
-        ),
+          !error &&
+          h(
+            'p',
+            { className: 'dc-report-message' },
+            records.length ? '没有匹配的发货指标' : '暂无发货指标',
+          ),
         table(columns, rows.slice(page * pageSize, (page + 1) * pageSize)),
-        h(
-          'div',
-          { className: 'dc-pagination' },
-          h(
-            'select',
-            {
-              'aria-label': '每页发货指标条数',
-              value: pageSize,
-              onChange: (event) => setPageSize(Number(event.target.value)),
-            },
-            [10, 25, 50].map((size) => h('option', { key: size, value: size }, `每页${size}条`)),
-          ),
-          h('span', {}, `共${rows.length}条，第${page + 1}页`),
-          h('button', { disabled: !page, onClick: () => setPage(page - 1) }, '上一页'),
-          h(
-            'button',
-            { disabled: (page + 1) * pageSize >= rows.length, onClick: () => setPage(page + 1) },
-            '下一页',
-          ),
-        ),
+        rows.length > 0 &&
+          renderTablePagination(h, {
+            label: '基地多维发货指标',
+            page,
+            total: rows.length,
+            rowsPerPage: pageSize,
+            onPageChange: setPage,
+            pageSizeLabel: '每页发货指标条数',
+            onPageSizeChange: setPageSize,
+          }),
       ),
     );
   };

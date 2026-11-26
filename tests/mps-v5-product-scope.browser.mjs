@@ -88,7 +88,7 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
     ),
     false,
   );
-  await frame.getByRole('button', { name: '数据源', exact: true }).click();
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
   const source = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
   await expect(source).toContainText('统计月 2026-11');
   await expect(source).toContainText('产品A');
@@ -121,7 +121,7 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
     ),
   });
   await frame.getByLabel('数据截止日', { exact: true }).fill('2026-11-23');
-  await expect(frame.getByRole('button', { name: '下载明细', exact: true })).toBeEnabled();
+  await expect(frame.getByRole('button', { name: '下载发货与结存', exact: true })).toBeEnabled();
   const downloadRows = async (name) => {
     const pending = page.waitForEvent('download', { timeout: 5000 });
     await frame.getByRole('button', { name, exact: true }).press('Enter');
@@ -132,7 +132,7 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
     const book = XLSX.read(text, { type: 'string', raw: true });
     return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
   };
-  const shipmentRows = (await downloadRows('下载明细')).filter((row) => row.产品编码);
+  const shipmentRows = (await downloadRows('下载发货与结存')).filter((row) => row.产品编码);
   assert.deepEqual(
     shipmentRows.map((row) => [row.基地, row.产品编码]),
     [['西南', 'A']],
@@ -186,8 +186,8 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
   }
   assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
   await workflowStep(frame, '需求确认');
-  await frame.getByLabel('评估版本选择').selectOption('local-1');
-  await frame.getByLabel('评估版本选择').selectOption('local-2');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-11');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
   await expect(products.getByLabel('产品统计期', { exact: true })).toHaveValue('2026-11');
   await page.evaluate(async () =>
     window.openAuthor('mps', 1200, structuredClone(window.readView())),
@@ -208,7 +208,7 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
       ),
     )
     .toBe('2026-11');
-  await frame.getByLabel('评估版本选择').selectOption('local-2');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
   await openMpsProductDetails(frame);
   await products.getByRole('button', { name: '删除 A', exact: true }).click();
   failed = true;
@@ -230,7 +230,7 @@ test('V5十二月评估独立选择十一月产品，范围贯通业务下载和
     false,
   );
   await workflowStep(frame, '主数据对应关系');
-  await expect(frame.getByRole('region', { name: '产品范围对账', exact: true })).toContainText(
-    '产品清单读取状态为failed',
-  );
+  await expect(
+    frame.getByRole('region', { name: '产品范围对账', exact: true }).getByRole('alert'),
+  ).toHaveText('产品清单读取失败');
 });
