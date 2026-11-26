@@ -29,6 +29,32 @@ const rateReady = (value) => {
   return rate !== null && rate >= 90 && rate <= 100;
 };
 const quantityText = (value) => (knownNumber(value) === null ? '—' : value + ' 箱');
+const pendingOrderReason = (row) => {
+  if (typeof row.reason === 'string' && row.reason.trim()) return row.reason.trim();
+  const snapshot = row.snapshot || {},
+    lines = Array.isArray(snapshot.lines)
+      ? snapshot.lines.filter((line) => line && typeof line === 'object')
+      : [],
+    reasons = [];
+  if (snapshot.credit?.status === 'insufficient' || snapshot.omsEventType === 'CREDIT_CHECK_FAILED')
+    reasons.push('信用额度校验未通过，待核实补充情况。');
+  if (
+    (snapshot.omsEventType === 'PRICE_CHECK_FAILED' && !snapshot.priceRecheckedAt) ||
+    [snapshot.priceStatus, ...lines.map((line) => line.priceStatus)].some(
+      (status) => typeof status === 'string' && status.trim() && status !== 'READY',
+    )
+  )
+    reasons.push('商品价格校验未通过，待核实价格。');
+  const rate = knownNumber(snapshot.satisfactionRate);
+  const shortage = lines.some((line) => knownNumber(line.shortage) > 0);
+  if (rate === null || rate < 0 || rate > 100)
+    reasons.push('订单满足率尚未明确，待核对库存满足情况。');
+  else if (rate === 100 && shortage) reasons.push('满足率与缺货明细不一致，待核对库存。');
+  else if (shortage || rate < 90) reasons.push('库存不足，待核对库存及商品数量。');
+  else if (lines.some((line) => knownNumber(line.shortage) === null))
+    reasons.push('商品缺货信息未完整提供，待核对库存满足情况。');
+  return reasons.length ? reasons.join('\n') : '待销售核对订单信息并提交。';
+};
 const calendarDate = (offset = 0) => {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
@@ -411,6 +437,12 @@ async function load() {
       info.textContent =
         row.snapshot.customer + '；' + (row.status === 'pending' ? '待处理' : '已处理');
       item.append(link, info);
+      if (row.status === 'pending') {
+        const reason = document.createElement('p');
+        reason.className = 'order-list-reason';
+        reason.textContent = '待处理原因：' + pendingOrderReason(row);
+        item.append(reason);
+      }
       if (row.status === 'pending')
         for (const [action, title] of [
           ['process', '订单处理'],
