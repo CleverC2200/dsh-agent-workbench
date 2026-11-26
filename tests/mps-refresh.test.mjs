@@ -7,7 +7,7 @@ import { pageActionEffect } from '../src/page-bridge/catalog.ts';
 const { outputFiles } = await build({
   stdin: {
     contents:
-      "import { registerMpsRefresh } from './static/mps/source/context.js'; registerMpsRefresh(() => window.startRecalculation());",
+      "import { registerMpsRefresh } from './static/mps/source/context.js'; registerMpsRefresh(() => window.refreshCurrentStep());",
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -16,16 +16,16 @@ const { outputFiles } = await build({
   platform: 'browser',
 });
 
-test('both MPS refresh routes start a recalculation on the connected page', async () => {
+test('both MPS refresh routes refresh the current step on the connected page', async () => {
   const listeners = new Map(),
     messages = [],
     timers = [];
   let reloads = 0,
-    recalculations = 0;
+    refreshes = 0;
   const parent = { postMessage() {} };
   const window = {
     parent,
-    startRecalculation: () => recalculations++,
+    refreshCurrentStep: () => refreshes++,
     location: {
       reload: () => {
         reloads++;
@@ -82,8 +82,8 @@ test('both MPS refresh routes start a recalculation on the connected page', asyn
     (message) => message.type === 'invoked' && message.id === 'refresh-call',
   );
   assert.ok(receipt);
-  assert.deepEqual(JSON.parse(JSON.stringify(receipt.result)), { status: 'recalculation-started' });
-  assert.equal(recalculations, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(receipt.result)), { status: 'refresh-started' });
+  assert.equal(refreshes, 1);
   port.onmessage({
     data: {
       type: 'apply',
@@ -97,7 +97,7 @@ test('both MPS refresh routes start a recalculation on the connected page', asyn
     (message) => message.type === 'applied' && message.toolCallId === 'catalog-refresh',
   );
   assert.equal(applied?.applied, true);
-  assert.equal(recalculations, 2);
+  assert.equal(refreshes, 2);
   assert.equal(reloads, 0);
   assert.equal(timers.length, 0);
 });

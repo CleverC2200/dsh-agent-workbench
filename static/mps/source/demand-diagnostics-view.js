@@ -63,22 +63,22 @@ export function createDemandDiagnostics(react, { downloadCsv }) {
         ),
       ]);
     return h(
-      'details',
-      {
-        className: 'wf-disclosure',
-        open,
-        onToggle: (event) => {
-          if (event.target === event.currentTarget) setOpen(event.currentTarget.open);
-        },
-      },
-      h('summary', null, '有效需求计算核对'),
+      'section',
+      { 'aria-label': '有效需求计算核对' },
       h(
-        'section',
-        { 'aria-label': '有效需求计算核对' },
+        'details',
+        {
+          className: 'wf-disclosure mps-report-details',
+          open,
+          onToggle: (event) => {
+            if (event.target === event.currentTarget) setOpen(event.currentTarget.open);
+          },
+        },
+        h('summary', null, '有效需求计算核对'),
         h(
-          'p',
-          { className: 'wf-note' },
-          `${selected.filter((row) => row.status === 'complete').length} / ${selected.length} 个大类月份完整可计算。大类按全国参与范围核对；基地和SKU筛选决定显示哪些大类。排除发货记录不计入应算条数，已知小计不代替完整合计。M+4仅作库存参考，模型预测不参与有效需求计算。`,
+          'button',
+          { className: 'mps-download', onClick: exportRows, disabled: !selected.length },
+          '下载需求计算核对',
         ),
         table(
           '逐类月需求核对',
@@ -107,7 +107,6 @@ export function createDemandDiagnostics(react, { downloadCsv }) {
             row.reason || '无缺项',
           ]),
         ),
-        h('button', { onClick: exportRows, disabled: !selected.length }, '下载需求计算核对'),
       ),
     );
   };

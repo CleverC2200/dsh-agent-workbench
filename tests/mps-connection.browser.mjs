@@ -67,38 +67,20 @@ async function fixture(t, { failEvents = false, sql } = {}) {
   };
 }
 
-test(
-  'MPS首次自动连接，分析按钮直接发送当前步骤到Core对话并保留原草稿',
-  { timeout: 30000 },
-  async (t) => {
-    const { page, frame, calls, contexts } = await fixture(t);
-    await expect.poll(() => calls.some((call) => call.operation === 'open')).toBe(true);
-    await expect
-      .poll(() => contexts.some((context) => context.parts?.navigation?.tab === 'check'))
-      .toBe(true);
-    const questions = frame.locator('.author-questions details');
-    if (!(await questions.evaluate((node) => node.open)))
-      await questions.locator('summary').press('Enter');
-    await frame.getByRole('button', { name: '核对当前数据', exact: true }).press('Enter');
-    await expect.poll(() => page.evaluate(() => window.corePrompts.length)).toBe(1);
-    assert.match(
-      (await page.evaluate(() => window.corePrompts[0])).content[0].text,
-      /核对当前步骤/,
-    );
-    await expect(frame.getByRole('status').filter({ hasText: '已发送到当前对话' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Core草稿接口fixture' })).toHaveValue(
-      '历史草稿，请保留。',
-    );
-    await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-    await frame.getByRole('button', { name: '解释计算过程', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => window.corePrompts.length)).toBe(2);
-    assert.equal(contexts.at(-1).parts.navigation.tab, 'ship');
-    assert.equal(
-      (await page.evaluate(() => window.corePrompts[1])).sessionId,
-      'session-33333333-3333-4333-8333-333333333333',
-    );
-  },
-);
+test('MPS首次自动连接，切换步骤持续发布上下文并保留原草稿', { timeout: 30000 }, async (t) => {
+  const { page, frame, calls, contexts } = await fixture(t);
+  await expect.poll(() => calls.some((call) => call.operation === 'open')).toBe(true);
+  await expect
+    .poll(() => contexts.some((context) => context.parts?.navigation?.tab === 'check'))
+    .toBe(true);
+  await expect(frame.locator('.author-questions')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Core草稿接口fixture' })).toHaveValue(
+    '历史草稿，请保留。',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect.poll(() => contexts.at(-1)?.parts?.navigation?.tab).toBe('ship');
+  assert.equal(await page.evaluate(() => window.corePrompts.length), 0);
+});
 
 test('MPS页面能力断开显示中文原因及重连入口', { timeout: 30000 }, async (t) => {
   const { page, calls, contexts, recover } = await fixture(t, { failEvents: true });
@@ -196,28 +178,17 @@ test('两次超时后停止自动重试，用户可单独恢复产品清单', as
   await expect(frame.getByRole('region', { name: '产品明细' })).toContainText('0 个产品');
 });
 
-test(
-  '其他业务页的快捷问题继续转入草稿，保留MPS未发文字也可单独恢复',
-  { timeout: 45000 },
-  async (t) => {
-    for (const name of ['category', 'mps']) {
-      const page = await authorPage(t);
-      const seed = name === 'mps' ? { version: 1, assistantDraft: '待恢复文字' } : undefined;
-      await page.evaluate(({ name, seed }) => window.openAuthor(name, 1200, seed), { name, seed });
-      const frame = page.frameLocator('iframe');
-      await expect
-        .poll(() => frame.locator('body').evaluate(() => window.dshPageInteraction?.available()))
-        .toBe(true);
-      if (name === 'category') {
-        await frame.locator('.author-questions summary').press('Enter');
-        await frame.locator('.author-question-list button').first().press('Enter');
-      } else {
-        await frame.getByRole('button', { name: '转入当前对话草稿', exact: true }).press('Enter');
-      }
-      await expect.poll(() => page.evaluate(() => window.persisted)).toBe(1);
-      await expect(frame.locator('.author-quote-status')).toContainText('已转入当前对话草稿');
-      assert.match(await page.evaluate(() => window.peerDraft), /^历史草稿，请保留。引用：/);
-      assert.equal(await page.evaluate(() => window.corePrompts.length), 0);
-    }
-  },
-);
+test('其他业务页的快捷问题继续转入草稿', { timeout: 30000 }, async (t) => {
+  const page = await authorPage(t);
+  await page.evaluate(() => window.openAuthor('category', 1200));
+  const frame = page.frameLocator('iframe');
+  await expect
+    .poll(() => frame.locator('body').evaluate(() => window.dshPageInteraction?.available()))
+    .toBe(true);
+  await frame.locator('.author-questions summary').press('Enter');
+  await frame.locator('.author-question-list button').first().press('Enter');
+  await expect.poll(() => page.evaluate(() => window.persisted)).toBe(1);
+  await expect(frame.locator('.author-quote-status')).toContainText('已转入当前对话草稿');
+  assert.match(await page.evaluate(() => window.peerDraft), /^历史草稿，请保留。引用：/);
+  assert.equal(await page.evaluate(() => window.corePrompts.length), 0);
+});

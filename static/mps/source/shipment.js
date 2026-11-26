@@ -1,3 +1,4 @@
+import { downloadWorkbook } from './workbook.js';
 import {
   businessBases,
   compareBusinessRows,
@@ -11,6 +12,7 @@ import {
   shipmentCoefficientPeriods,
 } from './shipment-forecast.js';
 import { matchesCategories } from './category-filter.js';
+import { createCalculationHelp } from './calculation-help.js';
 import {
   createSourceProductMatcher,
   sourceDimensions,
@@ -35,25 +37,35 @@ const shipmentPlanSource = 'ai_db.agents_ads_scm_base_sku_daily_plan_detail_d';
 const shipmentSourceTables = `ai_db.agents_scm_stock_detail_d / ${shipmentPlanSource}`;
 const noShipmentPlan = '该基地SKU当月截至统计日无日度计划，按0计算';
 const bases = businessBases;
-const fields = [
-  'open',
-  'transferIn',
-  'transferOut',
-  'inbound',
-  'monthOrder',
-  'shipped',
-  'prepped',
-  'unprepped',
-  'daily3',
-  'average',
-  'shipDays',
-  'prediction',
-  'manualPrediction',
-  'deviation',
-  'fin',
-  'remaining',
-  'end',
+const shipmentColumnGroups = [
+  [
+    '库存与发货输入',
+    [
+      'open',
+      'transferIn',
+      'transferOut',
+      'inbound',
+      'monthOrder',
+      'shipped',
+      'prepped',
+      'unprepped',
+      'daily3',
+      'average',
+    ],
+  ],
+  ['系统预测', ['shipDays', 'prediction']],
+  ['人工预测与采用值', ['manualPrediction', 'deviation', 'fin']],
+  ['当月结存', ['remaining', 'end']],
 ];
+const fields = shipmentColumnGroups.flatMap(([, columns]) => columns);
+const keyFields = ['shipped', 'fin', 'end'];
+const compactColumnGroups = [
+  ['关键数量', keyFields],
+  ...shipmentColumnGroups
+    .map(([label, columns]) => [label, columns.filter((field) => !keyFields.includes(field))])
+    .filter(([, columns]) => columns.length),
+];
+const compactFields = compactColumnGroups.flatMap(([, columns]) => columns);
 const names = [
   '月初 1 号库存',
   '调入计划',
@@ -436,13 +448,19 @@ function applyShipmentForecastChanges(edits, changes, deriveRows) {
   return next;
 }
 
+const missingShipmentInput = (row, field) =>
+  field !== 'transferIn' &&
+  field !== 'transferOut' &&
+  (row.prediction != null || ['open', 'inbound', 'remaining'].includes(field));
+
 export function createShipment(
   react,
   useMpsPart,
-  { Dialog, Upload, parseCsv, downloadCsv, monthOffset },
+  { Button, Dialog, Upload, parseCsv, downloadCsv, monthOffset, createPortal },
 ) {
   const h = react.createElement;
-  const { useBatchEdit, Actions, Field } = createBatchEdit(react);
+  const CalculationHelp = createCalculationHelp(react);
+  const { useBatchEdit, Actions, Field } = createBatchEdit(react, createPortal);
   const ReportPage = createReportPage(react);
   return function Shipment({
     draft,
@@ -453,8 +471,10 @@ export function createShipment(
     calculationRetry = 0,
     scopeGeneration,
     onSnapshot,
+    refreshRef,
     calculationSnapshot,
     onEditingChange,
+    adjustmentActionsTarget,
     selectedCategories = [],
   }) {
     const appliedRetry = react.useRef(calculationRetry);
@@ -513,6 +533,34 @@ export function createShipment(
     const [deviationFilter, setDeviationFilter] = react.useState('all');
     const [skuSearch, setSkuSearch] = react.useState('');
     const [issuesOpen, setIssuesOpen] = react.useState(false);
+    const [locatedSku, setLocatedSku] = react.useState(null);
+    const issueReportRef = react.useRef(null);
+    const shipmentTableRef = react.useRef(null);
+    const [compact, setCompact] = react.useState(false);
+    const visibleGroups = compact ? compactColumnGroups : shipmentColumnGroups;
+    const visibleFields = compact ? compactFields : fields;
+    react.useLayoutEffect(() => {
+      const container = shipmentTableRef.current;
+      if (!active || !container) return;
+      const updateLayout = () => setCompact(container.clientWidth <= 780);
+      updateLayout();
+      const observer = new ResizeObserver(updateLayout);
+      observer.observe(container);
+      return () => observer.disconnect();
+    }, [active]);
+    react.useLayoutEffect(() => {
+      if (shipmentTableRef.current) shipmentTableRef.current.scrollLeft = 0;
+    }, [compact]);
+    react.useLayoutEffect(() => {
+      if (!active || !locatedSku) return;
+      const target = [...shipmentTableRef.current.querySelectorAll('tr[data-shipment-sku]')].find(
+        (row) =>
+          row.dataset.shipmentBase === locatedSku.base &&
+          row.dataset.shipmentSku === locatedSku.code,
+      );
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }, [active, locatedSku]);
     const [formula, setFormula] = react.useState(null);
     const [error, setError] = react.useState('');
     const [busy, setBusy] = react.useState(false);
@@ -525,6 +573,7 @@ export function createShipment(
       setError('');
       setExpanded([]);
       setDeviationFilter('all');
+      setLocatedSku(null);
       setBusy(false);
       setSyncStatus('unread');
       return () => {
@@ -567,13 +616,24 @@ export function createShipment(
       !searchTerm ||
       [row.code, row.name].some((value) => value?.toLocaleLowerCase().includes(searchTerm));
     const visibleRows = categoryRows.filter(matchesSku);
+    const issueRows = visibleRows.filter(
+      (row) =>
+        row.dimensionIssue ||
+        row.transferIssues?.length ||
+        row.inventoryIssues.length ||
+        row.prediction == null ||
+        row.missingFields.some((field) => missingShipmentInput(row, field)),
+    );
+    const openIssueReport = () => {
+      const report = issueReportRef.current;
+      report.open = true;
+      report.firstElementChild.focus({ preventScroll: true });
+      report.firstElementChild.scrollIntoView({ block: 'nearest' });
+    };
     const sourceName = sourceKind === 'business' ? 'ai_db.agents_scm_stock_detail_d' : '本地输入';
+    const issueScopeColumns = ['评估版本', '评估月份', '统计基月', '截止日', '月份'];
     const issueColumns = [
-      '评估版本',
-      '评估月份',
-      '统计基月',
-      '截止日',
-      '月份',
+      ...issueScopeColumns,
       '基地',
       '产品编码',
       '异常类别',
@@ -584,13 +644,21 @@ export function createShipment(
       '来源',
       '原因',
     ];
-    const stockIssues = (issuesOpen ? visibleRows : emptyRows)
+    const issueDisplayColumns = [
+      '产品编码',
+      '基地',
+      '异常类别',
+      '指标',
+      '计算用值',
+      '实际处理',
+      '原始值',
+      '来源',
+      '原因',
+      ...issueScopeColumns,
+    ];
+    const stockIssues = (issuesOpen ? issueRows : emptyRows)
       .flatMap((row) => {
-        const missing = row.missingFields
-          .filter((field) => field !== 'transferIn' && field !== 'transferOut')
-          .filter(
-            (field) => row.prediction != null || ['open', 'inbound', 'remaining'].includes(field),
-          );
+        const missing = row.missingFields.filter((field) => missingShipmentInput(row, field));
         const closingUsesMissingInbound =
           row.end != null && (missing.includes('inbound') || missing.includes('remaining'));
         return [
@@ -980,6 +1048,11 @@ export function createShipment(
       appliedRetry.current = calculationRetry;
       if (!separateCalculation) void readLatestDate(calculationThrough, true);
     }, [calculationRetry]);
+    if (refreshRef)
+      refreshRef.current =
+        active && !busy && !pendingCalculationRead && !batch.active && hasCutoffRange
+          ? () => readLatestDate(calculationThrough, true)
+          : null;
     const selectSource = (next) => {
       updateState({
         activeSource: next,
@@ -1407,7 +1480,7 @@ export function createShipment(
         if (valid()) setError(failure.message);
       }
     };
-    const download = () => {
+    const shipmentDetailSheet = () => {
       const outputColumns = [
         '评估版本',
         '评估月份',
@@ -1442,10 +1515,10 @@ export function createShipment(
         '物料组名称',
         '分类待补原因',
       ];
-      downloadCsv(
-        `MPS-${draft.month}-${draft.id}-发货与结存.csv`,
-        outputColumns,
-        visibleRows.map((row) => ({
+      return {
+        name: '基地SKU明细',
+        columns: outputColumns,
+        rows: visibleRows.map((row) => ({
           评估版本: draft.name,
           评估月份: draft.month,
           截止日: cutoff,
@@ -1469,16 +1542,8 @@ export function createShipment(
           原始预计月末结存: row.rawEnd ?? '',
           库存归零处理: row.inventoryIssues.map((issue) => issue.reason).join('；'),
           输入来源: source,
-          调整来源: row.adjustment ? JSON.stringify(row.adjustment) : '默认单品预测值',
-          剩余入库来源:
-            row.remainingSource ??
-            (sourceKind === 'demo'
-              ? '演示推算：生产入库÷22×8，四舍五入'
-              : sourceKind === 'local-file'
-                ? '本地CSV；BI排产未核齐'
-                : passed <= 1
-                  ? '截止日日号减1为0，入库日均和剩余入库待补'
-                  : `截止日累计生产入库÷${passed - 1}×${totalDays - passed}，逐SKU四舍五入`),
+          调整来源: row.adjustment ? JSON.stringify(row.adjustment) : '',
+          剩余入库来源: row.remainingSource ?? '',
           缺失输入: row.missingFields.map((field) => names[fields.indexOf(field)]).join('、'),
           发运速度来源: row.paceSource,
           发运速度: row.pace,
@@ -1487,7 +1552,7 @@ export function createShipment(
           物料组名称: row.groupName ?? '',
           分类待补原因: row.dimensionIssue ?? '',
         })),
-      );
+      };
     };
     const contextFields = [
       'base',
@@ -1595,6 +1660,10 @@ export function createShipment(
                     ? '待补'
                     : display(row[field], field),
             ),
+        row === national &&
+          ['shipped', 'fin', 'end'].includes(field) &&
+          national.missingCounts[field] > 0 &&
+          h('small', { className: 'sp-missing-count' }, `${national.missingCounts[field]} 项待定`),
       );
     };
     const renderRow = (row, who, label, className) =>
@@ -1604,9 +1673,12 @@ export function createShipment(
           key: JSON.stringify([className, who, row.category, row.group]),
           className,
           'data-deviation': row.deviationBand || undefined,
+          ...(row.base && row.code && !row.children
+            ? { 'data-shipment-base': row.base, 'data-shipment-sku': row.code, tabIndex: -1 }
+            : {}),
         },
         h('th', { scope: 'row' }, label),
-        ...fields.map((field) => numberCell(row, field, who)),
+        ...visibleFields.map((field) => numberCell(row, field, who)),
       );
     const toggleLabel = (id, who, label, count, descendants = []) =>
       h(
@@ -1760,48 +1832,47 @@ export function createShipment(
       renderHierarchy(parent, scope, [], levels, showAll);
       return levels.flat();
     };
-    const downloadHierarchy = () =>
-      downloadCsv(
-        `MPS-${draft.month}-发货汇总及明细.csv`,
-        [
-          '评估月份',
-          '统计月',
-          '截止日',
-          '基地',
-          '粒度',
-          '大类',
-          '物料组',
-          '产品编码',
-          '产品名称',
-          ...names,
-          '人工预测覆盖',
-          '预测偏差率',
-        ],
-        [national, ...groups].flatMap((group) => {
-          const scope = group.who;
-          return [
-            { ...group, base: scope, level: '合计' },
-            ...shipmentHierarchy(group, scope, true),
-          ].map((row) => ({
-            评估月份: draft.month,
-            统计月: month,
-            截止日: cutoff,
-            基地: row.base,
-            粒度: row.level,
-            大类: row.category,
-            物料组: row.group,
-            产品编码: row.code,
-            产品名称: row.name,
-            ...Object.fromEntries(fields.map((field, index) => [names[index], row[field]])),
-            人工预测覆盖: row.children
-              ? `${row.importedCount}/${row.children.length}`
-              : row.manualPrediction == null
-                ? '0/1'
-                : '1/1',
-            预测偏差率: row.deviationRate ?? '',
-          }));
-        }),
-      );
+    const shipmentSummarySheet = () => ({
+      name: '发货汇总',
+      columns: [
+        '评估月份',
+        '统计月',
+        '截止日',
+        '基地',
+        '粒度',
+        '大类',
+        '物料组',
+        '产品编码',
+        '产品名称',
+        ...names,
+        '人工预测覆盖',
+        '预测偏差率',
+      ],
+      rows: [national, ...groups].flatMap((group) => {
+        const scope = group.who;
+        return [
+          { ...group, base: scope, level: '合计' },
+          ...shipmentHierarchy(group, scope, true),
+        ].map((row) => ({
+          评估月份: draft.month,
+          统计月: month,
+          截止日: cutoff,
+          基地: row.base,
+          粒度: row.level,
+          大类: row.category,
+          物料组: row.group,
+          产品编码: row.code,
+          产品名称: row.name,
+          ...Object.fromEntries(fields.map((field, index) => [names[index], row[field]])),
+          人工预测覆盖: row.children
+            ? `${row.importedCount}/${row.children.length}`
+            : row.manualPrediction == null
+              ? '0/1'
+              : '1/1',
+          预测偏差率: row.deviationRate ?? '',
+        }));
+      }),
+    });
     const formulas =
       formula &&
       (() => {
@@ -1911,7 +1982,6 @@ export function createShipment(
           {
             title: `计算过程 · ${who} · ${names[fields.indexOf(field)]}`,
             close: () => setFormula(null),
-            footer: h('button', { onClick: () => setFormula(null) }, '关闭'),
           },
           h('div', { className: 'sp-formula' }, expression),
           row.children &&
@@ -2005,27 +2075,27 @@ export function createShipment(
     return h(
       'section',
       { hidden: !active, className: 'sp-page', 'aria-label': '发货本地核对' },
-      h('p', {}, `当前展示月 ${month}；评估所需统计基月 ${calculationMonth}。`),
       h(
-        'p',
-        { role: 'status', 'aria-label': '计算快照状态' },
-        usableCalculationSnapshot
-          ? `${calculationSnapshot.cutoff} 快照已进入评估。${calculationSnapshot.rows.length} 条基地 SKU；发货待补 ${calculationSnapshot.rows.filter((row) => row.fin == null).length} 条，预计月末结存待补 ${calculationSnapshot.rows.filter((row) => row.end == null).length} 条。`
-          : calculationSnapshot?.status === 'loading'
-            ? calculationSnapshot.waitingForCoefficients
-              ? '正在读取上月发运系数'
-              : `正在读取 ${calculationMonth} 发货快照`
-            : productInputsLoading && (business || backgroundBasis)
-              ? '发货来源已读取，正在等待产品清单'
-              : `${calculationMonth} 计算快照尚未取得或已失效。${calculationSnapshot?.shipmentMonth === calculationMonth ? (calculationSnapshot.error ?? '') : ''}`,
-      ),
-      h(
-        'button',
-        {
-          disabled: busy || batch.active || !hasCutoffRange || !hasMpsSource(),
-          onClick: () => readLatestDate(calculationThrough, true),
-        },
-        `读取 ${calculationMonth} 计算快照`,
+        'div',
+        { className: 'sp-snapshot' },
+        h(
+          'div',
+          {},
+          h('p', {}, `当前展示月 ${month}；评估所需统计基月 ${calculationMonth}。`),
+          h(
+            'p',
+            { role: 'status', 'aria-label': '计算快照状态' },
+            usableCalculationSnapshot
+              ? `${calculationSnapshot.cutoff} 快照已进入评估。${calculationSnapshot.rows.length} 条基地 SKU；发货待补 ${calculationSnapshot.rows.filter((row) => row.fin == null).length} 条，预计月末结存待补 ${calculationSnapshot.rows.filter((row) => row.end == null).length} 条。`
+              : calculationSnapshot?.status === 'loading'
+                ? calculationSnapshot.waitingForCoefficients
+                  ? '正在读取上月发运系数'
+                  : `正在读取 ${calculationMonth} 发货快照`
+                : productInputsLoading && (business || backgroundBasis)
+                  ? '发货来源已读取，正在等待产品清单'
+                  : `${calculationMonth} 计算快照尚未取得或已失效。${calculationSnapshot?.shipmentMonth === calculationMonth ? (calculationSnapshot.error ?? '') : ''}`,
+          ),
+        ),
       ),
       h(
         'div',
@@ -2084,19 +2154,58 @@ export function createShipment(
             ),
           ),
         h('span', {}, '单位 件'),
+        h(
+          Button,
+          {
+            type: 'primary',
+            className: 'dc-primary',
+            disabled: busy || batch.active || !cutoff || !hasMpsSource(),
+            onClick: sync,
+          },
+          '同步实际发货',
+        ),
       ),
       h(
         'div',
         { className: 'dc-card sp-card', onKeyDown: batch.keyDown },
         h(
           'div',
-          { className: 'dc-card-head sp-toolbar' },
-          h('h3', {}, '本月预估发货'),
+          { className: 'dc-card-head mps-report-heading mps-table-heading dc-report-filters' },
+          h(
+            'div',
+            { className: 'dc-calculation-heading' },
+            h('h3', {}, '本月预估发货'),
+            h(
+              CalculationHelp,
+              { title: '本月预估发货口径' },
+              h(
+                'p',
+                {},
+                `${month}调拨计划取库存日报截止日前最新适用快照，优先用纠偏计划，再用初版计划。完整读取后确认无该基地SKU记录时按0。`,
+              ),
+              h(
+                'p',
+                {},
+                '发运天数=(已备+未备)÷发运速度；近三天日均不大于0时使用正的截止日avg_30d_send；两项日均确认均不大于0时，本月预估取已发货+已备+未备，发运天数为0。三数量均确认是0时预估为0；来源日期缺失、重复或冲突时保留待核。',
+              ),
+              h(
+                'p',
+                {},
+                '预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。原预测量=预测日均×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，四舍五入。常规预测再乘大类发运系数并四舍五入，数量合计直接使用。本月预测量汇总取各基地、各SKU修正后的系统预测量之和。',
+              ),
+              h(
+                'p',
+                {},
+                '近30天日均发货直接读取截止日avg_30d_send。累计生产入库为月初至截止日produce_in_qty逐日合计，保留负数冲销；重复日或缺值时待定；入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
+              ),
+            ),
+          ),
           h('input', {
             'aria-label': '搜索发货单品',
             placeholder: '搜索编码或名称',
             value: skuSearch,
             onChange: (event) => {
+              setLocatedSku(null);
               setSkuSearch(event.target.value);
             },
           }),
@@ -2119,78 +2228,87 @@ export function createShipment(
               ].map(([value, label]) => h('option', { key: value, value }, label)),
             ),
           ),
-          sourceKind === 'demo' && h('span', { className: 'dc-status' }, '演示数据'),
           h(
-            'span',
-            { className: 'dc-status' },
-            sourceKind === 'business'
-              ? '业务来源'
-              : sourceKind === 'local-file'
-                ? '本地文件'
-                : '待同步',
+            Button,
+            { type: 'outline', onClick: openIssueReport },
+            issueRows.length ? `查看异常 · ${issueRows.length} 个基地 SKU` : '查看异常',
           ),
           h(
-            'span',
-            { className: 'sp-shipped' },
-            '本月已发 ',
-            h('b', {}, display(national.shipped)),
-            ' 件',
-          ),
-          h('span', { className: 'sp-spacer' }),
-          h(Actions, {
-            batch,
-            disabled: busy || !rows.length,
-            hint: '调拨计划由库存日报读取，整月预估发货和基地剩余入库可调整',
-          }),
-          batch.active &&
-            (Object.keys(state.values ?? {}).length > 0 ||
-              Object.keys(state.remaining ?? {}).length > 0) &&
+            'div',
+            { className: 'mps-report-actions' },
+            sourceKind === 'demo' && h('span', { className: 'dc-status' }, '演示数据'),
+            h(Actions, {
+              container: adjustmentActionsTarget,
+              batch,
+              disabled: busy || !rows.length,
+            }),
+            batch.active &&
+              (Object.keys(state.values ?? {}).length > 0 ||
+                Object.keys(state.remaining ?? {}).length > 0) &&
+              h(
+                'button',
+                {
+                  disabled:
+                    !Object.keys(state.values ?? {}).length &&
+                    !Object.keys(state.remaining ?? {}).length,
+                  onClick: () => {
+                    batch.replace(
+                      Object.fromEntries([
+                        [
+                          '全国合计:fin',
+                          {
+                            label: '全国合计 整月预估发货',
+                            text: '',
+                            meta: { who: '全国合计', kind: 'fin', level: 0 },
+                          },
+                        ],
+                        ...groups.map((group) => [
+                          `${group.who}:remaining`,
+                          {
+                            label: `${group.who} 剩余天数入库`,
+                            text: '',
+                            meta: { who: group.who, kind: 'remaining', level: 1 },
+                          },
+                        ]),
+                      ]),
+                    );
+                    setError('');
+                    setFormula(null);
+                  },
+                },
+                '重置',
+              ),
             h(
               'button',
               {
-                disabled:
-                  !Object.keys(state.values ?? {}).length &&
-                  !Object.keys(state.remaining ?? {}).length,
-                onClick: () => {
-                  batch.replace(
-                    Object.fromEntries([
-                      [
-                        '全国合计:fin',
-                        {
-                          label: '全国合计 整月预估发货',
-                          text: '',
-                          meta: { who: '全国合计', kind: 'fin', level: 0 },
-                        },
-                      ],
-                      ...groups.map((group) => [
-                        `${group.who}:remaining`,
-                        {
-                          label: `${group.who} 剩余天数入库`,
-                          text: '',
-                          meta: { who: group.who, kind: 'remaining', level: 1 },
-                        },
-                      ]),
-                    ]),
-                  );
-                  setError('');
-                  setFormula(null);
-                },
+                className: 'mps-download',
+                disabled: !cutoff || !visibleRows.length,
+                onClick: () =>
+                  downloadWorkbook(`MPS-${draft.month}-${draft.id}-发货与结存.xlsx`, [
+                    shipmentDetailSheet(),
+                    shipmentSummarySheet(),
+                  ]),
               },
-              '重置',
+              '下载发货与结存',
             ),
+          ),
         ),
-        (busy || syncStatus !== 'failed' || activeSource !== 'business') &&
-          h('p', { role: 'status' }, busy ? '正在读取或校验输入…' : source),
-        h(
-          'p',
-          { className: 'dc-card-note' },
-          `${month}调拨计划取日度计划明细截至截止日的最新快照，纠偏优先于初版。无快照或字段为空时待补。汇总包含全部明细，下载按当前单品搜索范围提供明细。`,
-        ),
+        busy && h('p', { role: 'status' }, '正在读取发货数据…'),
+        !busy &&
+          sourceKind === 'business' &&
+          h('p', { className: 'sp-period', title: source }, `数据期间 ${month}-01 至 ${cutoff}`),
+        !busy && sourceKind === 'local-file' && h('p', { className: 'sp-period' }, source),
+        !busy &&
+          syncStatus === 'failed' &&
+          activeSource === 'business' &&
+          !error &&
+          h('p', { role: 'alert', className: 'sp-error' }, '发货数据同步失败'),
+        error && h('p', { role: 'alert', className: 'sp-error' }, error),
         searchTerm && !visibleRows.length && h('p', { role: 'status' }, '主表中没有匹配的单品'),
         coefficientCategories.length > 0 &&
           h(
             'details',
-            { className: 'sp-method' },
+            { className: 'sp-method mps-report-details' },
             h('summary', {}, '大类发运系数'),
             coefficientPeriods?.elapsed &&
               h(
@@ -2251,18 +2369,32 @@ export function createShipment(
           'div',
           {
             className: 'dc-table-scroll sp-scroll',
+            ref: shipmentTableRef,
             tabIndex: 0,
             role: 'region',
             'aria-label': '本月预估发货明细滚动区域',
           },
           h(
             'table',
-            { className: 'sp-table', 'aria-label': '本月预估发货明细' },
-            h(
-              'colgroup',
-              {},
-              ...[260, ...fields.map(() => 100)].map((width, index) =>
-                h('col', { key: index, style: { width } }),
+            {
+              className: 'sp-table',
+              'data-compact': compact ? 'true' : undefined,
+              'aria-label': '本月预估发货明细',
+            },
+            h('colgroup', null, h('col', { style: { width: 'var(--sp-row-header-width)' } })),
+            ...visibleGroups.map(([label, columns]) =>
+              h(
+                'colgroup',
+                { key: label },
+                ...columns.map((field) =>
+                  h('col', {
+                    key: field,
+                    style: {
+                      width:
+                        compact && keyFields.includes(field) ? 'var(--sp-key-column-width)' : 100,
+                    },
+                  }),
+                ),
               ),
             ),
             h(
@@ -2271,38 +2403,36 @@ export function createShipment(
               h(
                 'tr',
                 {},
-                h('th', { rowSpan: 2, scope: 'col' }, '全国 / 基地 / 大类 / 物料组 / 单品'),
-                ...[
-                  ['库存与发货输入', 10],
-                  ['系统预测', 2],
-                  ['人工预测与采用值', 3],
-                  ['当月结存', 2],
-                ].map(([label, span]) =>
-                  h('th', { key: label, colSpan: span, scope: 'colgroup' }, label),
+                h(
+                  'th',
+                  { rowSpan: 2, scope: 'col' },
+                  compact ? '范围 / 单品' : '全国 / 基地 / 大类 / 物料组 / 单品',
+                ),
+                ...visibleGroups.map(([label, columns]) =>
+                  h('th', { key: label, colSpan: columns.length, scope: 'colgroup' }, label),
                 ),
               ),
               h(
                 'tr',
                 {},
-                ...names.map((name, index) =>
-                  h(
+                ...visibleFields.map((field) => {
+                  const name = names[fields.indexOf(field)];
+                  const editable = field === 'fin' || field === 'remaining';
+                  return h(
                     'th',
-                    { key: name, scope: 'col' },
-                    ['fin', 'remaining'].includes(fields[index])
+                    { key: field, scope: 'col' },
+                    editable
                       ? h(
                           'button',
                           {
                             className: 'sp-column-formula',
-                            onClick: () => explain(national, fields[index], '全国合计'),
+                            onClick: () => explain(national, field, '全国合计'),
                           },
                           name,
                         )
                       : name,
-                    ['fin', 'remaining'].includes(fields[index])
-                      ? h('small', {}, '（可改）')
-                      : null,
-                  ),
-                ),
+                  );
+                }),
               ),
             ),
             h(
@@ -2340,10 +2470,21 @@ export function createShipment(
         h(
           'details',
           {
-            className: 'sp-method sp-issue-report',
+            className: 'sp-method sp-issue-report mps-report-details',
+            ref: issueReportRef,
             onToggle: (event) => setIssuesOpen(event.currentTarget.open),
           },
           h('summary', {}, '发货与库存异常报告'),
+          h(
+            'button',
+            {
+              className: 'mps-download',
+              disabled: !stockIssues.length || busy,
+              onClick: () =>
+                downloadCsv(`MPS-${draft.month}-发货与库存异常.csv`, issueColumns, stockIssues),
+            },
+            '下载发货与库存异常',
+          ),
           issuesOpen &&
             h(
               react.Fragment,
@@ -2378,15 +2519,6 @@ export function createShipment(
               business?.metadata.recentStatus === 'insufficient-days' &&
                 h('p', {}, '截止日前本月不足三天，近三天日均未提供'),
               h(
-                'button',
-                {
-                  disabled: !stockIssues.length || busy,
-                  onClick: () =>
-                    downloadCsv(`MPS-${draft.month}-发货与库存异常.csv`, issueColumns, stockIssues),
-                },
-                '下载发货与库存异常',
-              ),
-              h(
                 ReportPage,
                 { stateKey: 'shipmentIssues', label: '发货与库存异常', rows: stockIssues },
                 (pageRows) =>
@@ -2407,7 +2539,7 @@ export function createShipment(
                         h(
                           'tr',
                           {},
-                          issueColumns.map((column) =>
+                          issueDisplayColumns.map((column) =>
                             h('th', { key: column, scope: 'col' }, column),
                           ),
                         ),
@@ -2419,7 +2551,26 @@ export function createShipment(
                           h(
                             'tr',
                             { key: index },
-                            issueColumns.map((column) => h('td', { key: column }, issue[column])),
+                            issueDisplayColumns.map((column) =>
+                              h(
+                                'td',
+                                { key: column },
+                                column === '产品编码'
+                                  ? h(
+                                      'button',
+                                      {
+                                        className: 'sp-issue-sku',
+                                        'aria-label': `定位 ${issue.基地} ${issue.产品编码}`,
+                                        onClick: () => {
+                                          setSkuSearch(issue.产品编码);
+                                          setLocatedSku({ base: issue.基地, code: issue.产品编码 });
+                                        },
+                                      },
+                                      issue.产品编码,
+                                    )
+                                  : issue[column],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -2431,34 +2582,15 @@ export function createShipment(
         ),
         !rows.length && h('p', { className: 'dc-empty' }, '暂无数据'),
         h(
-          'details',
-          { className: 'sp-method' },
-          h('summary', {}, '本月预估发货的算法'),
-          h(
-            'p',
-            {},
-            '发运天数=(已备+未备)÷发运速度；近三天日均不大于0时使用正的截止日avg_30d_send；两项日均确认均不大于0时，本月预估取已发货+已备+未备，发运天数为0。三数量均确认是0时预估为0；来源日期缺失、重复或冲突时保留待核。预测日均=(已发货+已备+未备)÷(已过天数+发运天数)。本月预测量=预测日均×大类发运系数×max(0,总天数−已过天数−发运天数)+已发货+已备+未备，仅最终结果四舍五入，数量合计直接使用。本月预测量汇总取各基地、各SKU修正后的系统预测量之和。近30天日均发货直接读取截止日avg_30d_send。累计生产入库取日度计划明细 in_qty，按月初至截止日逐日合计。保留负数冲销，无记录、重复日或缺值时待定。入库日均=累计生产入库÷(截止日日号−1)，剩余自然天数保持原算法。',
-          ),
-        ),
-        h(
           'div',
           { className: 'dc-card-foot' },
-          !busy &&
-            syncStatus === 'failed' &&
-            activeSource === 'business' &&
-            h('p', { role: 'status' }, '数仓输入同步失败，未采用旧业务结果'),
-          error && h('p', { role: 'alert', className: 'sp-error' }, error),
-          h(
-            'button',
-            { onClick: sync, disabled: busy || batch.active || !cutoff || !hasMpsSource() },
-            '同步实际发货',
-          ),
           !batch.active && h(Upload, { label: '选择发货输入CSV', text: '上传输入', read }),
           !batch.active &&
             h(Upload, { label: '选择发货人工预测CSV', text: '导入人工预测', read: readForecast }),
           h(
             'button',
             {
+              className: 'mps-download',
               onClick: () =>
                 downloadCsv(`发货人工预测-${calculationMonth}-模板.csv`, forecastColumns, []),
             },
@@ -2466,16 +2598,12 @@ export function createShipment(
           ),
           h(
             'button',
-            { onClick: () => downloadCsv('发货输入-模板.csv', [...columns, '近30天日均发货'], []) },
+            {
+              className: 'mps-download',
+              onClick: () => downloadCsv('发货输入-模板.csv', [...columns, '近30天日均发货'], []),
+            },
             'CSV模板',
           ),
-          h('span', { className: 'sp-spacer' }),
-          h(
-            'button',
-            { onClick: downloadHierarchy, disabled: !cutoff || !rows.length },
-            '下载汇总及明细',
-          ),
-          h('button', { onClick: download, disabled: !cutoff || !rows.length }, '下载明细'),
         ),
       ),
       formulas,

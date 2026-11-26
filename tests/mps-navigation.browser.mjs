@@ -29,8 +29,7 @@ async function navigationPage(t, connected = false, width = 1200) {
       '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,物料组甲,,\n郑州,B,产品乙,水饺,系列乙,物料组乙,,',
     ),
   });
-  const selected = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
-  const month = selected.match(/\d{4}-\d{2}/)[0];
+  const month = await frame.getByLabel('评估月份选择').inputValue();
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '提报.csv',
     mimeType: 'text/csv',

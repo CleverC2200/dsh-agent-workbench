@@ -118,3 +118,12 @@ export function canPrefetchMps() {
     (connection?.downlink ?? 2) >= 2
   );
 }
+
+export const cancelOnSourceReset = (cancel) => {
+  const events = ['gea-session-changing', 'gea-identity-changed', 'pagehide'];
+  for (const name of events) window.addEventListener(name, cancel);
+  return () => {
+    for (const name of events) window.removeEventListener(name, cancel);
+    cancel();
+  };
+};

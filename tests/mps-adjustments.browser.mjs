@@ -54,8 +54,7 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
       '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,产品,汤圆,系列,组,组名称,,',
     ),
   });
-  const month = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
-  const period = month.match(/\d{4}-\d{2}/)[0];
+  const period = await frame.getByLabel('评估月份选择').inputValue();
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '叶子提报.csv',
     mimeType: 'text/csv',
@@ -89,21 +88,29 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
   assert.equal(edit.reason, '其他：客户已确认增量');
   assert.match(edit.at, /^\d{4}-\d{2}-\d{2}T/);
   await matrix.getByLabel('搜索当前步骤', { exact: true }).fill('A');
-  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  const adjust = frame
+    .locator('.dc-adjustment-actions')
+    .getByRole('button', { name: '调整', exact: true });
+  await expect(adjust).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(adjust).toHaveCSS('background-color', 'rgb(223, 23, 50)');
+  await adjust.click();
   await expect(matrix.getByLabel(`汤圆 组 A 郑州 ${period} 需求数量`, { exact: true })).toHaveValue(
     '120',
   );
-  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  await frame
+    .locator('.dc-adjustment-actions')
+    .getByRole('button', { name: '保存调整', exact: true })
+    .click();
   assert.equal(
     await page.evaluate(
       () => window.readView().localDrafts.drafts[0].adjustments.quantities[0].quantity,
     ),
     120.375,
   );
-  await beginAdjustment(matrix);
+  await beginAdjustment(frame);
   await matrix.getByRole('button', { name: `撤销固定数量 汤圆 组 A 郑州 ${period}` }).click();
-  await selectAdjustmentReason(matrix, '恢复系统值');
-  await saveAdjustment(matrix);
+  await selectAdjustmentReason(frame, '恢复系统值');
+  await saveAdjustment(frame);
   await expect
     .poll(async () =>
       page.evaluate(
@@ -122,7 +129,9 @@ test('MPS base SKU override records a reason and time, survives reload and undo 
   assert.equal(history[0].reason, '其他：客户已确认增量');
   await expect(matrix.getByText('当前固定数量', { exact: true })).toHaveCount(0);
   await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
-  await expect(frame.getByRole('status').filter({ hasText: /^本地草稿$/ })).toBeVisible();
+  await expect(frame.locator('.dc-page-head').getByText('本地草稿', { exact: true })).toHaveCount(
+    0,
+  );
 });
 
 test('MPS shipment local overrides and remaining intake survive a business-source switch and Document replacement', async (t) => {
@@ -151,6 +160,9 @@ test('MPS shipment local overrides and remaining intake survive a business-sourc
     ),
   });
   const table = frame.getByRole('table', { name: '本月预估发货明细' });
+  await expect(
+    table.getByRole('button', { name: '郑州 整月预估发货 计算过程', exact: true }),
+  ).toHaveText('300');
   await expandShipmentBase(frame, '郑州');
   const forecast = table.getByLabel('郑州 A 整月预估发货', { exact: true });
   await beginAdjustment(frame);

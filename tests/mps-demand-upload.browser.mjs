@@ -147,6 +147,7 @@ test('需求导入保留系统列和导入原值，最终预测立即采用并�
 
 test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据、历史和第四月参考', async (t) => {
   const { page, frame, month, view } = await setup(t);
+  const actions = frame.locator('.dc-adjustment-actions');
   const original = await draft(page);
   const referenceDate = new Date(`${month}-01T00:00:00Z`);
   referenceDate.setUTCMonth(referenceDate.getUTCMonth() + 3);
@@ -189,10 +190,10 @@ test('CSV预览不写入，点击确认仅改变基地SKU并保留系统依据�
     7,
   );
   await view.getByLabel('搜索当前步骤').fill('产品甲');
-  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  await actions.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('');
-  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
-  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
+  await actions.getByLabel('批量调整原因', { exact: true }).selectOption('数据纠错');
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
   await expect.poll(async () => (await draft(page)).adjustments.quantities.length).toBe(1);
   const undone = await draft(page);
   assert.equal(undone.adjustments.quantities.length, 1);
@@ -357,7 +358,9 @@ test('跨月参考保留原版人工导入且新版从系统值开始', async (t
   await creation.getByRole('button', { name: '创建本地版本', exact: true }).click();
   await expect.poll(async () => (await draft(page)).month).toBe(nextMonth);
   assert.deepEqual((await draft(page)).demandImports ?? [], []);
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption(month);
   await frame.getByLabel('评估版本选择', { exact: true }).selectOption(base.id);
+  await expect.poll(async () => (await draft(page)).id).toBe(base.id);
   assert.deepEqual((await draft(page)).demandImports, base.demandImports);
 });
 

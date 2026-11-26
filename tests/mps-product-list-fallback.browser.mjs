@@ -83,13 +83,15 @@ test('产品清单回退贯通新建评估、锁月浏览、恢复与主动重�
     .toEqual({ targetMonth: '2027-01', adoptedMonth: '2026-11' });
   await workflowStep(frame, '主数据对应关系');
   const scope = frame.getByRole('region', { name: '产品范围对账', exact: true });
-  await expect(scope).toContainText('实际采用2026-11');
+  await expect(scope).toContainText('产品清单采用 2026-11（目标 2027-01）');
   await expect(scope).not.toContainText('未证明同期间');
   await workflowStep(frame, '需求确认');
   filled = true;
-  await frame.getByRole('button', { name: '数据源', exact: true }).click();
+  await openMpsProductDetails(frame);
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
   const source = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
-  await expect(source).toContainText('统计月 2026-11');
+  await expect(source).toContainText('评估目标 2027-01，实际采用 2026-11');
+  await expect(source).not.toContainText('统计月 2026-11');
   await source.getByRole('button', { name: '刷新', exact: true }).click();
   await expect(source).toContainText('产品A');
   await expect(source).not.toContainText('产品B');
@@ -113,21 +115,33 @@ test('产品清单回退贯通新建评估、锁月浏览、恢复与主动重�
     ).length,
     before,
   );
-  await products.getByLabel('产品统计期', { exact: true }).fill('2026-12');
-  await frame.getByRole('button', { name: '数据源', exact: true }).click();
+  const monthField = products.getByLabel('产品统计期', { exact: true });
+  const monthPanel = products.locator('.mps-month-panel');
+  await monthField.press('ArrowDown');
+  await expect(monthPanel).toBeVisible();
+  await expect(
+    monthPanel.getByRole('button', { name: '1月', exact: true, pressed: true }),
+  ).toBeVisible();
+  await expect(monthPanel).toContainText('2027年');
+  await monthPanel.getByRole('button', { name: '上一年', exact: true }).click();
+  await monthPanel.getByRole('button', { name: '12月', exact: true }).click();
+  await expect(monthPanel).toBeHidden();
+  await expect(monthField).toHaveValue('2026-12');
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
   await expect(source).toContainText('预览目标 2026-12');
   await expect(source).toContainText('评估已采用 2026-11');
   await expect(source).toContainText('产品B');
   await source.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await products.getByRole('button', { name: '同步产品', exact: true }).click();
-  await expect(products).toContainText('目标 2026-12，实际采用 2026-12');
   await expect(products).toContainText('产品B');
+  await expect(products.getByLabel('产品统计期', { exact: true })).toHaveValue('2026-12');
+  await expect(products).not.toContainText('目标 2026-12，实际采用 2026-12');
   failed = true;
   await products.getByLabel('产品统计期', { exact: true }).fill('2026-10');
   await products.getByRole('button', { name: '同步产品', exact: true }).click();
   await expect(products.getByRole('alert')).toContainText('数据读取失败');
   await expect(products).toContainText('产品B');
-  await expect(products).toContainText('目标 2026-12，实际采用 2026-12');
+  await expect(products).toContainText('待同步 2026-10，当前显示上次同步的清单');
   assert.deepEqual(await page.evaluate(() => window.readView().localDrafts.drafts[0]), old);
   assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
 });
@@ -166,7 +180,7 @@ test('产品数据源翻页固定采用月和配置，零源记录与过滤后�
   await products.getByRole('button', { name: '同步产品', exact: true }).click();
   await expect(products).toContainText('2026-12 至 2027-01 无产品清单');
   const periodCalls = calls.filter((call) => call.queryId === 'products.period').length;
-  await frame.getByRole('button', { name: '数据源', exact: true }).click();
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
   const source = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
   await expect(source).toContainText('共26条');
   await source.getByRole('button', { name: '下一页', exact: true }).click();
@@ -182,15 +196,18 @@ test('产品数据源翻页固定采用月和配置，零源记录与过滤后�
   await products.getByRole('button', { name: '同步产品', exact: true }).click();
   await expect(products).toContainText('目标 2027-01，无可用产品清单');
   await expect(products.getByRole('alert')).toHaveCount(0);
-  await frame.getByRole('button', { name: '数据源', exact: true }).click();
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
   await expect(source).toContainText('无可用产品清单');
   await expect(source.getByRole('button', { name: '下载当前页', exact: true })).toBeDisabled();
   await source.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   mode = 'filtered';
   await products.getByRole('button', { name: '同步产品', exact: true }).click();
-  await expect(products).toContainText('目标 2027-01，实际采用 2027-01');
+  await expect(products.getByRole('button', { name: '同步产品', exact: true })).toBeEnabled();
   await expect(products).not.toContainText('无可用产品清单');
   await expect(products).not.toContainText('产品Z');
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
+  await expect(source).toContainText('统计月 2027-01');
+  await expect(source).not.toContainText('评估目标 2027-01，实际采用 2027-01');
 });
 
 test('新评估首次读取中断后重开仍保存成功采用月份，历史无来源字段保持不变', async (t) => {

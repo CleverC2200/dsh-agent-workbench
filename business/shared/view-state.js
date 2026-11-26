@@ -19,6 +19,14 @@ export function createPageViewState(page) {
   let state = { version: 1 };
   let binding,
     dirty = false;
+  let evaluationStorage = false;
+  let nextRequest = 0;
+  const pendingEvaluations = new Map();
+  const releaseEvaluations = () => {
+    for (const { reject } of pendingEvaluations.values())
+      reject(new DOMException('页面连接已切换', 'AbortError'));
+    pendingEvaluations.clear();
+  };
   const listeners = new Set();
   const releasedChannels = new Set();
   const send = () => {
@@ -43,6 +51,17 @@ export function createPageViewState(page) {
       ready();
       return;
     }
+    if (value.type === 'evaluation-storage-reply') {
+      if (!binding || binding.channel !== value.channel || binding.generation !== value.generation)
+        return;
+      const pending = pendingEvaluations.get(value.requestId);
+      if (pending) {
+        pendingEvaluations.delete(value.requestId);
+        if (value.error) pending.reject(Error('本地评估结果不可用'));
+        else pending.resolve(value.value);
+      }
+      return;
+    }
     if (value.type === 'rejected') {
       if (binding?.channel === value.channel && binding.generation === value.generation)
         for (const listener of listeners) listener(state, 'rejected');
@@ -52,6 +71,8 @@ export function createPageViewState(page) {
       releasedChannels.add(value.channel);
       if (binding?.channel === value.channel) {
         binding = undefined;
+        evaluationStorage = false;
+        releaseEvaluations();
         if (sessionPage) {
           dirty = false;
           state = { version: 1 };
@@ -69,7 +90,10 @@ export function createPageViewState(page) {
       (binding?.channel === value.channel && value.generation < binding.generation)
     )
       return;
+    if (binding?.channel !== value.channel || binding.generation !== value.generation)
+      releaseEvaluations();
     binding = { channel: value.channel, generation: value.generation };
+    evaluationStorage = value.evaluationStorage === true;
     state = dirty ? { ...value.state, ...state } : { ...value.state, version: 1 };
     dirty = false;
     for (const listener of listeners) listener(state, 'restore');
@@ -80,6 +104,8 @@ export function createPageViewState(page) {
     'pagehide',
     () => {
       binding = undefined;
+      evaluationStorage = false;
+      releaseEvaluations();
       window.removeEventListener('message', receive);
       listeners.clear();
     },
@@ -88,6 +114,28 @@ export function createPageViewState(page) {
   ready();
   return {
     get: () => state,
+    hasEvaluationStorage: () => evaluationStorage,
+    evaluationRequest: (request) =>
+      new Promise((resolve, reject) => {
+        if (!binding || !evaluationStorage) {
+          reject(Error('本地评估结果存储尚未连接'));
+          return;
+        }
+        const requestId = ++nextRequest;
+        pendingEvaluations.set(requestId, { resolve, reject });
+        window.parent.postMessage(
+          {
+            protocol: PROTOCOL,
+            type: 'evaluation-storage',
+            page,
+            version: 1,
+            ...binding,
+            requestId,
+            request,
+          },
+          '*',
+        );
+      }),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

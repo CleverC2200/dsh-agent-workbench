@@ -276,7 +276,7 @@ export const mpsLocalStateSchema = z
   .strictObject({
     format: z.literal(1),
     selected: text,
-    drafts: z.array(mpsLocalDraftSchema).min(1).max(100),
+    drafts: z.array(mpsLocalDraftSchema).min(1),
   })
   .refine(
     (state) =>
@@ -284,3 +284,34 @@ export const mpsLocalStateSchema = z
       state.drafts.some((draft) => draft.id === state.selected),
   );
 export type MpsLocalState = z.infer<typeof mpsLocalStateSchema>;
+
+export function nextMpsDraftId(ids: ReadonlySet<string>): string {
+  let number = ids.size + 1;
+  while (ids.has(`local-${number}`)) number++;
+  return `local-${number}`;
+}
+
+export function mergeMpsSessionDrafts(states: MpsLocalState[]): MpsLocalState | undefined {
+  const [primary, ...others] = states;
+  if (!primary || !others.length) return primary;
+  const reserved = new Set(states.flatMap((state) => state.drafts.map((draft) => draft.id)));
+  const drafts = [...primary.drafts];
+  const versions = new Map(drafts.map((draft) => [draft.id, new Set([JSON.stringify(draft)])]));
+  for (const state of others) {
+    for (const draft of state.drafts) {
+      const saved = versions.get(draft.id);
+      const content = JSON.stringify(draft);
+      if (saved?.has(content)) continue;
+      if (!saved) {
+        versions.set(draft.id, new Set([content]));
+        drafts.push(draft);
+        continue;
+      }
+      saved.add(content);
+      const id = nextMpsDraftId(reserved);
+      reserved.add(id);
+      drafts.push({ ...draft, id });
+    }
+  }
+  return { ...primary, drafts };
+}

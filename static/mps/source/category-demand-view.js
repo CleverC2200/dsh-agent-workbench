@@ -1,9 +1,12 @@
 import { matchesCategories } from './category-filter.js';
+import { createCalculationHelp } from './calculation-help.js';
 import { categoryDemandMissing } from './category-demand.js';
 import { demandBasisLabel, festivalOptionValue } from './festival-demand.js';
 import { createUpperAdjustmentConflicts } from './upper-adjustment-conflicts.js';
 import { workflowContextPreview } from './evaluation-view.js';
-import { readFailure } from './mps-read.js';
+import { cancelOnSourceReset, readFailure } from './mps-read.js';
+import { categorySourceInputs } from './category-source-inputs.js';
+import { hasSourceCalculation, readSourceTable } from './source-tables.js';
 
 export function createShipmentScopeNotice(react, { downloadCsv }) {
   const h = react.createElement;
@@ -58,13 +61,22 @@ export function createShipmentScopeNotice(react, { downloadCsv }) {
         ),
         h(
           'button',
-          { onClick: () => downloadCsv(`待定单品异常-${month}.csv`, columns, rows) },
+          {
+            className: 'mps-download',
+            onClick: () => downloadCsv(`待定单品异常-${month}.csv`, columns, rows),
+          },
           '下载待定单品异常CSV',
         ),
       ),
       h(
         'details',
-        { open: expanded, onToggle: (event) => setExpanded(event.currentTarget.open) },
+        {
+          className: 'mps-report-details',
+          open: expanded,
+          onToggle: (event) => {
+            if (event.target === event.currentTarget) setExpanded(event.currentTarget.open);
+          },
+        },
         h('summary', null, `查看待定单品异常（${rows.length}条）`),
         h(
           'p',
@@ -125,7 +137,15 @@ export function createCategoryDemand(
   { table, downloadCsv, downloadExceptions, useMpsPart },
 ) {
   const h = react.createElement;
+  const CalculationHelp = createCalculationHelp(react);
   const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv: downloadExceptions });
+  const calculationFormulas = [
+    ['① 环比法', '本月预估发货 × 环比'],
+    ['② 占比法', '全年预估 × 占比'],
+    ['两法平均量', '①、②各占一半'],
+    ['销售校正量', '销售提报量 × 达成率'],
+    ['加权', '仅 M+1 使用，两法平均量与销售校正量各占一半'],
+  ];
   const columns = [
     '大类',
     '月份',
@@ -169,6 +189,8 @@ export function createCategoryDemand(
     selectedCategories = [],
     shipmentSnapshot,
     result,
+    categorySources,
+    readAnnualPool,
     retryFestivalHistory,
     loading = false,
     blocked = false,
@@ -177,6 +199,84 @@ export function createCategoryDemand(
   }) {
     const basisRadioId = react.useId();
     const festivalSelectId = react.useId();
+    const exportController = react.useRef(null);
+    const [sourceExport, setSourceExport] = react.useState(null);
+    react.useEffect(() => cancelOnSourceReset(() => exportController.current?.abort()), []);
+    const read = draft.historicalIndicatorsRead;
+    const sourceReady = read?.status === 'ready' && read.month === draft.month;
+    const hasSourceRows = [...categorySources.sourceCategories].some((category) =>
+      matchesCategories(category, selectedCategories),
+    );
+    const exportSourceDetails = async () => {
+      const stop = new AbortController();
+      exportController.current = stop;
+      setSourceExport({ loading: true });
+      try {
+        const { periods, annual } = draft.historicalIndicators;
+        const [fullPeriods, fullAnnual] = await Promise.all([
+          Promise.all(
+            periods.map(async (entry) =>
+              entry.metadata?.projection === 'calculation' ||
+              (entry.error && hasSourceCalculation('category-history'))
+                ? {
+                    month: entry.month,
+                    ...(await readSourceTable(
+                      'category-history',
+                      entry.month,
+                      stop.signal,
+                      entry.metadata?.requestedMonths,
+                      -1,
+                      { full: true },
+                    )),
+                  }
+                : entry,
+            ),
+          ),
+          annual.metadata?.projection === 'calculation' ||
+          (annual.error && hasSourceCalculation('annual-pool'))
+            ? readAnnualPool(false, { full: true })
+            : annual,
+        ]);
+        stop.signal.throwIfAborted();
+        const rows = categorySourceInputs({
+          ...draft,
+          historicalIndicators: { periods: fullPeriods, annual: fullAnnual },
+        })
+          .readSourceRows()
+          .filter((row) => matchesCategories(row['大类'], selectedCategories));
+        downloadCsv(
+          `${draft.month}-大类池内源明细.csv`,
+          [
+            '来源',
+            '月份',
+            '基地',
+            '产品编码',
+            '大类',
+            '数量',
+            '原始来源数量',
+            '财年',
+            '原始全国SKU财年量',
+            '基地SKU财年量',
+            '财年源月份数',
+            '财年有效月份数',
+            '池内大类财年量',
+            '财年缺失或冲突月份',
+            '财年核对异常',
+            '上年同期发货数量',
+            '上月发货数量',
+            '取数依据',
+            '缺项原因',
+          ],
+          rows,
+        );
+        setSourceExport(null);
+      } catch (error) {
+        if (!stop.signal.aborted) {
+          stop.abort();
+          setSourceExport({ error: error.message });
+        }
+      }
+    };
     const festival = result.festival;
     const festivalMonths = new Set(festival?.months);
     const naturalActualMonths = result.recent.filter((month) => !festivalMonths.has(month));
@@ -349,20 +449,21 @@ export function createCategoryDemand(
         },
         h(
           'div',
-          { className: 'dc-card-head dc-demand-edit-bar' },
+          { className: 'dc-card-head dc-demand-edit-bar mps-report-heading mps-table-heading' },
           h('h3', {}, '大类预估需求数量'),
           h('span', { className: 'dc-card-note' }, '单位：件'),
           h(
-            'span',
-            { className: 'dc-card-note' },
-            '大类只读汇总，请在需求加工与收敛中按基地SKU和月份修正',
+            'button',
+            {
+              className: 'mps-download',
+              type: 'button',
+              disabled: !sourceReady || !hasSourceRows || sourceExport?.loading,
+              onClick: exportSourceDetails,
+            },
+            sourceExport?.loading ? '正在导出大类池内源明细…' : '下载大类池内源明细',
           ),
         ),
-        h(
-          'p',
-          { className: 'dc-card-note' },
-          '合计、逐月测算和明细下载均按当前大类筛选；缺项不补零。',
-        ),
+        sourceExport?.error && h('p', { role: 'alert' }, sourceExport.error),
         !showLoadingProgress &&
           shipmentSnapshot?.status === 'loading' &&
           h(
@@ -408,16 +509,31 @@ export function createCategoryDemand(
             ),
       ),
       h(
-        'details',
-        { className: 'dc-calculation-evidence' },
-        h('summary', {}, '逐月测算依据'),
+        'section',
+        { 'aria-label': '逐月测算' },
         h(
-          'section',
-          { 'aria-label': '逐月测算', className: 'dc-card dc-results dc-category-demand' },
+          'details',
+          { className: 'dc-card dc-results mps-report-details' },
+          h('summary', null, '逐月测算依据'),
           h(
             'div',
-            { className: 'dc-card-head dc-calculation-toolbar' },
-            h('h3', {}, '逐月测算（到大类预估需求数量）'),
+            { className: 'dc-toolbar dc-report-filters mps-disclosure-toolbar' },
+            h(
+              CalculationHelp,
+              { title: '逐月测算口径' },
+              h(
+                'p',
+                null,
+                `${result.rows[0]?.baseMonth ?? ''}为统计基月M。${festival ? '节日覆盖月份使用对照区间的历史环比和同期占比，窗口外沿用自然月。' : 'M+1、M+2使用历史环比，M+3、M+4使用年度环比；'}后月只承接前月环比测算量。四个月均计算两法平均量，仅M+1再与销售校正量各占一半，M+2至M+4直接使用两法平均量。M+4仅作库存参考。`,
+              ),
+              h(
+                'dl',
+                null,
+                calculationFormulas.map(([name, formula]) =>
+                  h('div', { key: name }, h('dt', null, name), h('dd', null, formula)),
+                ),
+              ),
+            ),
             h(
               'span',
               { className: 'dc-card-note' },
@@ -488,6 +604,7 @@ export function createCategoryDemand(
             h(
               'button',
               {
+                className: 'mps-download',
                 disabled: waiting,
                 onClick: () =>
                   downloadCsv(
@@ -549,33 +666,13 @@ export function createCategoryDemand(
                   '改用自然月',
                 ),
             ),
-          h(
-            'p',
-            { className: 'dc-card-note' },
-            `${result.rows[0]?.baseMonth ?? ''}为统计基月M。${festival ? '节日覆盖月份使用对照区间的历史环比和同期占比，窗口外沿用自然月。' : 'M+1、M+2使用历史环比，M+3、M+4使用年度环比；'}后月只承接前月环比测算量。四个月均计算两法平均量，仅M+1再与销售校正量各占一半，M+2至M+4直接使用两法平均量。M+4仅作库存参考。`,
-          ),
           result.adjustmentIssues.length > 0 &&
             h('p', { role: 'alert' }, `以下调整未生效：${result.adjustmentIssues.join('；')}`),
           !waiting &&
             h(
               'div',
               { className: 'dc-category-demand-main' },
-              table(
-                calculationColumns,
-                visibleRows,
-                Object.fromEntries(
-                  [
-                    ['① 环比法', '本月预估发货*环比'],
-                    ['② 占比法', '全年预估 × 占比'],
-                    ['两法平均量', '①②各占一半'],
-                    ['销售校正量', '销售提报量×达成率'],
-                    ['加权', '仅M+1：两法平均量与销售校正量各占一半'],
-                  ].map(([name, formula]) => [
-                    name,
-                    h(react.Fragment, {}, name, h('small', {}, formula)),
-                  ]),
-                ),
-              ),
+              table(calculationColumns, visibleRows),
             ),
         ),
       ),

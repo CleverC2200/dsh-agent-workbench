@@ -1,7 +1,7 @@
 import { useStepViewField } from './step-view-state.js';
 import { adjustmentReasons } from './local-draft.js';
 
-export function createBatchEdit(react) {
+export function createBatchEdit(react, createPortal) {
   const h = react.createElement;
   const reasons = adjustmentReasons;
   function useBatchEdit({
@@ -159,8 +159,15 @@ export function createBatchEdit(react) {
       },
     };
   }
-  function Actions({ batch, requireReason = false, disabled = false, hint = '留空恢复系统值' }) {
-    return h(
+  function Actions({
+    batch,
+    container,
+    requireReason = false,
+    disabled = false,
+    hint = '留空恢复系统值',
+  }) {
+    if (createPortal && !container) return null;
+    const actions = h(
       'div',
       { className: 'mps-batch-actions' },
       batch.active
@@ -220,6 +227,7 @@ export function createBatchEdit(react) {
         batch.notice &&
         h('span', { role: 'status', className: 'mps-edit-notice' }, batch.notice),
     );
+    return createPortal ? createPortal(actions, container) : actions;
   }
   function Field({
     batch,

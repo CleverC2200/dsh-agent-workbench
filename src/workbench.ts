@@ -2,6 +2,7 @@ import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { PageIdentitySnapshot, WorkbenchFramePage } from './frame.ts';
 import { isBusinessViewPage, validHtmlViewState, type HtmlViewState } from './html-view-state.ts';
+import { mergeMpsSessionDrafts, type MpsLocalState } from './mps-local-draft.ts';
 
 export interface WorkbenchPage {
   readonly id: MainPanelId;
@@ -59,6 +60,25 @@ export interface WorkbenchPresentationMemory {
   set(value: WorkbenchPresentation): void;
 }
 export const WORKBENCH_PRESENTATION_KEY = 'agent-workbench.presentation.v2';
+
+export function mpsAccountViewKey(page: string, scope: string | undefined): string | undefined {
+  if (page !== 'plan-category-production' || !scope?.startsWith('["')) return;
+  try {
+    const pair: unknown = JSON.parse(scope);
+    if (
+      Array.isArray(pair) &&
+      pair.length === 2 &&
+      pair.every((part) => typeof part === 'string' && part.length > 0)
+    )
+      return JSON.stringify([pair[0]]);
+  } catch {
+    return undefined;
+  }
+}
+
+export function mpsViewDrafts(view: HtmlViewState | undefined): MpsLocalState | undefined {
+  return view && 'localDrafts' in view ? view.localDrafts : undefined;
+}
 
 function presentation(value: unknown): WorkbenchPresentation | undefined {
   const state = value as WorkbenchPresentation | null;
@@ -163,7 +183,15 @@ export class WorkbenchController implements AgentWorkbench {
       this.visited.delete(page.id);
       this.associations.delete(page.id);
       this.activePresets.delete(page.id);
-      this.htmlViews.delete(page.id);
+      const localDrafts =
+        page.id === 'plan-category-production'
+          ? [...(this.htmlViews.get(page.id) ?? [])].flatMap(([scope, view]) => {
+              const drafts = mpsViewDrafts(view);
+              return drafts ? ([[scope, { version: 1, localDrafts: drafts }]] as const) : [];
+            })
+          : [];
+      if (localDrafts.length) this.htmlViews.set(page.id, new Map(localDrafts));
+      else this.htmlViews.delete(page.id);
       if (this.selectedDocument?.id === page.id) {
         this.selectedDocument = undefined;
         this.restoredWithoutSession = false;
@@ -279,9 +307,19 @@ export class WorkbenchController implements AgentWorkbench {
   readHtmlViewState(page: string, scope?: string): HtmlViewState | undefined {
     if (!this.documents.has(page as MainPanelId)) return undefined;
     if (isBusinessViewPage(page) && !scope) return undefined;
-    const value = this.htmlViews
-      .get(page as MainPanelId)
-      ?.get(isBusinessViewPage(page) ? scope! : 'static');
+    const values = this.htmlViews.get(page as MainPanelId);
+    const value = values?.get(isBusinessViewPage(page) ? scope! : 'static');
+    const account = mpsAccountViewKey(page, scope);
+    if (account && values) {
+      const localDrafts =
+        mpsViewDrafts(values.get(account)) ??
+        mergeMpsSessionDrafts(
+          [scope!, ...[...values.keys()].reverse().filter((key) => key !== scope)]
+            .filter((key) => mpsAccountViewKey(page, key) === account)
+            .flatMap((key) => mpsViewDrafts(values.get(key)) ?? []),
+        );
+      if (localDrafts) return structuredClone({ ...(value ?? { version: 1 }), localDrafts });
+    }
     return value === undefined ? undefined : structuredClone(value);
   }
   saveHtmlViewState(page: string, scope: string | undefined, value: unknown): void {
@@ -294,7 +332,21 @@ export class WorkbenchController implements AgentWorkbench {
       values = new Map();
       this.htmlViews.set(page as MainPanelId, values);
     }
-    values.set(isBusinessViewPage(page) ? scope! : 'static', structuredClone(value));
+    const account = mpsAccountViewKey(page, scope);
+    if (account && 'localDrafts' in value && value.localDrafts) {
+      if (!values.has(account)) {
+        for (const [key, state] of values) {
+          if (mpsAccountViewKey(page, key) !== account || !('localDrafts' in state)) continue;
+          const { localDrafts: _legacy, ...view } = state;
+          values.set(key, view);
+        }
+      }
+      const { localDrafts, ...view } = value;
+      values.set(account, { version: 1, localDrafts: structuredClone(localDrafts) });
+      values.set(scope!, structuredClone(view));
+    } else {
+      values.set(isBusinessViewPage(page) ? scope! : 'static', structuredClone(value));
+    }
     this.persist();
   }
   leaveDocument(): void {

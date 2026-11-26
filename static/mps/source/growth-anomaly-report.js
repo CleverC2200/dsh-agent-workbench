@@ -1,3 +1,4 @@
+import { createReportPage } from './report-page.js';
 import { growthAnomaly } from 'dsh-agent-manage/mps-compute/category-demand';
 
 export function growthSourceAnomalies(rows) {
@@ -47,6 +48,8 @@ const columns = [
 ];
 export function createGrowthAnomalyReport(react, { table, downloadCsv }) {
   const h = react.createElement;
+  const ReportPage = createReportPage(react);
+  const percentage = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 2 });
   return function GrowthAnomalyReport({ draft, anomalies }) {
     if (!anomalies.length) return null;
     const rows = anomalies.map((row) => ({
@@ -67,19 +70,31 @@ export function createGrowthAnomalyReport(react, { table, downloadCsv }) {
     }));
     return h(
       'details',
-      { className: 'dc-card', 'aria-label': '同比环比异常报告' },
+      { className: 'dc-card mps-report-details', 'aria-label': '同比环比异常报告' },
       h('summary', null, `同比环比异常报告（${rows.length}条）`),
       h(
         'button',
         {
+          className: 'mps-download',
           type: 'button',
           onClick: () => downloadCsv(`${draft.month}-同比环比异常.csv`, columns, rows),
         },
         '下载同比环比异常报告',
       ),
-      rows.length > 25 &&
-        h('p', { className: 'dc-muted' }, '预览前25条，下载包含当前范围全部异常。'),
-      table(columns, rows.slice(0, 25)),
+      h(
+        ReportPage,
+        { stateKey: 'growthAnomalyPage', label: '同比环比异常报告', rows },
+        (visibleRows) =>
+          table(
+            columns.slice(1),
+            visibleRows.map((row) => ({
+              ...row,
+              原增长率: Number.isFinite(row.原增长率) ? percentage.format(row.原增长率) : '',
+              采用增长率: Number.isFinite(row.采用增长率) ? percentage.format(row.采用增长率) : '',
+              计算倍率: Number.isFinite(row.计算倍率) ? +row.计算倍率.toFixed(4) : '',
+            })),
+          ),
+      ),
     );
   };
 }

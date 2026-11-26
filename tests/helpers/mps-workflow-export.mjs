@@ -3,10 +3,13 @@ import * as XLSX from 'xlsx-republish';
 import { mpsDownloadText } from './mps-download.mjs';
 
 export async function workflowExportRows(frame) {
-  const button = frame.getByRole('button', { name: /^(下载需求拆分|下载需求推导参考)$/ });
+  const button = frame.getByRole('button', {
+    name: /^(下载需求拆分|下载需求推导参考|导出求解结果|导出产销存结果)$/,
+  });
+  const sheet = (await button.textContent()) === '下载需求拆分' ? undefined : '需求推导参考';
   const pending = button.page().waitForEvent('download');
   await button.click();
-  const csv = await mpsDownloadText(await (await pending).path());
+  const csv = await mpsDownloadText(await (await pending).path(), sheet);
   const book = XLSX.read(csv, { type: 'string', raw: true });
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }

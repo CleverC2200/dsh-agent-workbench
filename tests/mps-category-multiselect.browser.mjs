@@ -135,7 +135,10 @@ test('前五步均可修改共享大类筛选，下载和异常随筛选，后�
   await expect(
     table.getByRole('button', { name: '全国合计 本月已发货 计算过程', exact: true }),
   ).toHaveText('20');
-  const csv = await download(page, frame.getByRole('button', { name: '下载明细', exact: true }));
+  const csv = await download(
+    page,
+    frame.getByRole('button', { name: '下载发货与结存', exact: true }),
+  );
   assert.match(csv, /甲类/);
   assert.match(csv, /乙类/);
   assert.doesNotMatch(csv, /丙类/);
@@ -198,7 +201,10 @@ test('前五步均可修改共享大类筛选，下载和异常随筛选，后�
   }
   const report = await download(
     page,
-    frame.getByRole('button', { name: '下载需求推导参考', exact: true }),
+    frame.getByRole('button', {
+      name: /^(下载需求推导参考|导出求解结果|导出产销存结果)$/,
+      exact: true,
+    }),
   );
   assert.match(report, /丙类/);
   await step(frame, '需求确认');
@@ -283,7 +289,10 @@ test('筛选内汇总调整及恢复只修改当前叶子，隐藏大类的调�
       await expect(
         frame.getByRole('button', { name: `郑州 ${code} ${title} 计算过程`, exact: true }),
       ).toHaveText(String(value));
-    const text = await download(page, frame.getByRole('button', { name: '下载明细', exact: true }));
+    const text = await download(
+      page,
+      frame.getByRole('button', { name: '下载发货与结存', exact: true }),
+    );
     const book = XLSX.read(text, { type: 'string', raw: true });
     const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
     const row = rows.find((row) => row['产品编码'] === code);
@@ -363,8 +372,16 @@ test('产品下载遵循大类多选且不受独立文本搜索影响，清空�
   await filter.getByRole('checkbox', { name: '乙类', exact: true }).check();
   await details.getByLabel('搜索产品', { exact: true }).fill('产品A');
   await expect(details.locator('tbody tr')).toHaveCount(1);
-  for (const name of ['下载', '下载产品源字段']) {
-    const text = await download(page, details.getByRole('button', { name, exact: true }));
+  const downloadProducts = async () => {
+    const pending = page.waitForEvent('download');
+    await details.getByRole('button', { name: '下载产品明细', exact: true }).click();
+    const file = await pending;
+    assert.equal(file.suggestedFilename(), '产品明细.xlsx');
+    const book = XLSX.read(await readFile(await file.path()), { type: 'buffer' });
+    assert.deepEqual(book.SheetNames, ['产品关系', '产品源字段']);
+    return book.SheetNames.map((name) => XLSX.utils.sheet_to_csv(book.Sheets[name]));
+  };
+  for (const text of await downloadProducts()) {
     assert.match(text, /产品A/);
     assert.match(text, /产品B/);
     assert.doesNotMatch(text, /产品C/);
@@ -374,6 +391,5 @@ test('产品下载遵循大类多选且不受独立文本搜索影响，清空�
   )
     .getByRole('button', { name: '清空筛选', exact: true })
     .click();
-  for (const name of ['下载', '下载产品源字段'])
-    assert.match(await download(page, details.getByRole('button', { name, exact: true })), /产品C/);
+  for (const text of await downloadProducts()) assert.match(text, /产品C/);
 });

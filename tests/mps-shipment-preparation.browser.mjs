@@ -11,7 +11,7 @@ const compiled = await build({
     resolveDir: process.cwd(),
     contents: `import React from 'react';import {createRoot} from 'react-dom/client';
       import {createShipment} from './static/mps/source/shipment.js';
-      const Shipment=createShipment(React,()=>{},{Dialog:()=>null,Upload:()=>null,downloadCsv(){},monthOffset:()=> '2026-10'});
+      const Shipment=createShipment(React,()=>{},{Button:'button',Dialog:()=>null,Upload:()=>null,downloadCsv(){},monthOffset:()=> '2026-10'});
       function Page(){
         const [draft,setDraft]=React.useState({id:'restore',month:'2026-11',productSource:'business',products:[{基地:'郑州',产品编码:'A',大类:'汤圆'}],shipment:window.initialShipment??{cutoff:'2026-10-22',activeSource:'business',values:{},remaining:{},transferPlans:[{month:'2026-10',base:'郑州',code:'A',inbound:0,outbound:0}]}});
         const generation=React.useRef(0);

@@ -17,8 +17,8 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
       '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,G1,物料组甲,,\n华东,A,产品甲,汤圆,系列甲,G1,物料组甲,,',
     ),
   });
-  const selected = await frame.getByLabel('评估版本选择').locator('option:checked').textContent();
-  const month = selected.match(/\d{4}-\d{2}/)[0];
+  const month = await frame.getByLabel('评估月份选择').inputValue();
+  const actions = frame.locator('.dc-adjustment-actions');
   await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
     name: '提报.csv',
     mimeType: 'text/csv',
@@ -86,9 +86,31 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   await expect(category.getByRole('button', { name: '调整', exact: true })).toHaveCount(0);
   await expect(frame.getByRole('region', { name: '历史上层修正冲突', exact: true })).toBeVisible();
   await expect(category).toContainText('90');
-  await frame.getByText('逐月测算依据', { exact: true }).click();
+  const calculation = frame.getByRole('region', { name: '逐月测算', exact: true });
+  const help = calculation.locator('[popover]');
+  const explanation = calculation.getByRole('button', { name: '口径说明', exact: true });
+  const title = calculation.getByText('逐月测算依据', { exact: true });
+  const downloadCalculation = calculation.getByRole('button', {
+    name: '下载测算明细',
+    exact: true,
+  });
+  await expect(calculation.locator('table')).toBeHidden();
+  await expect(downloadCalculation).toBeHidden();
+  await title.press('Enter');
+  await expect(calculation.locator('table')).toBeVisible();
+  const header = await title.boundingBox();
+  const action = await downloadCalculation.boundingBox();
+  assert.ok(Math.abs(header.y + header.height / 2 - action.y - action.height / 2) <= 2);
+  await expect(help).toBeHidden();
+  await expect(calculation.locator('thead')).not.toContainText('本月预估发货 × 环比');
+  await explanation.press('Enter');
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('M+4仅作库存参考');
+  await expect(help).toContainText('本月预估发货 × 环比');
+  await explanation.press('Escape');
+  await expect(help).toBeHidden();
   const download = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
+  await downloadCalculation.click();
   const csv = await mpsDownloadText(await (await download).path());
   const book = XLSX.read(csv, { type: 'string', raw: true });
   const categoryRows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
@@ -120,17 +142,17 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
   await frame.getByLabel('搜索当前步骤', { exact: true }).fill('产品甲');
-  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  await actions.getByRole('button', { name: '调整', exact: true }).click();
   const field = view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true });
   await field.fill('55');
-  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(frame.getByRole('alert')).toContainText('请选择');
-  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('其他');
-  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(frame.getByRole('alert')).toContainText('说明');
-  await frame.getByLabel('其他原因说明', { exact: true }).fill('合同调整复核');
-  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(actions.getByRole('alert')).toContainText('请选择');
+  await actions.getByLabel('批量调整原因', { exact: true }).selectOption('其他');
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(actions.getByRole('alert')).toContainText('说明');
+  await actions.getByLabel('其他原因说明', { exact: true }).fill('合同调整复核');
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(actions.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
   const rows = await workflowExportRows(frame);
   assert.equal(
     Number(
@@ -157,11 +179,11 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
   const fourth = new Date(`${month}-01T00:00:00Z`);
   fourth.setUTCMonth(fourth.getUTCMonth() + 3);
   const referenceMonth = fourth.toISOString().slice(0, 7);
-  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  await actions.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${referenceMonth} 需求数量`, { exact: true }).fill('7');
-  await frame.getByLabel('批量调整原因', { exact: true }).selectOption('销售变化');
-  await frame.getByRole('button', { name: '保存调整', exact: true }).click();
-  await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
+  await actions.getByLabel('批量调整原因', { exact: true }).selectOption('销售变化');
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
+  await expect(actions.getByRole('button', { name: '保存调整', exact: true })).toHaveCount(0);
   const reference = await workflowExportRows(frame);
   assert.equal(
     Number(
@@ -173,9 +195,9 @@ test('仅基地SKU编辑，原因点选、历史上层归档、四月参考与�
     7,
   );
   const table = frame.getByRole('table', { name: '加工后的需求明细', exact: true });
-  await frame.getByRole('button', { name: '调整', exact: true }).click();
+  await actions.getByRole('button', { name: '调整', exact: true }).click();
   await view.getByLabel(`汤圆 G1 A 郑州 ${month} 需求数量`, { exact: true }).fill('999');
-  await frame.getByRole('button', { name: '取消', exact: true }).click();
+  await actions.getByRole('button', { name: '取消', exact: true }).click();
   assert.equal(
     Number(
       (await workflowExportRows(frame)).find(

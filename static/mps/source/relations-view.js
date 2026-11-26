@@ -1,3 +1,4 @@
+import { renderTablePagination } from './report-page.js';
 import { compareBusinessRows, createTablePresentation, isSkuColumn } from './table-presentation.js';
 import { matchesCategories } from './category-filter.js';
 import { call, ready } from '../../../business/shared/channel.js';
@@ -137,6 +138,8 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
     onResult,
     active = true,
     enabled = true,
+    refresh = 0,
+    openSource,
     selectedCategories = [],
     products = [],
   }) {
@@ -144,7 +147,6 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
     const [search, setSearch] = react.useState('');
     const [onlyMissing, setOnlyMissing] = react.useState(false);
     const [page, setPage] = react.useState(0);
-    const [attempt, setAttempt] = react.useState(0);
     const [loaded, setLoaded] = react.useState({});
     const scopeKey = JSON.stringify([scope?.id, scope?.month, scope?.generation]);
     const state = loaded.scopeKey === scopeKey ? loaded : { busy: true };
@@ -192,7 +194,7 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
         controller.abort();
         events.forEach((event) => window.removeEventListener(event, invalidate));
       };
-    }, [scopeKey, attempt, enabled]);
+    }, [scopeKey, refresh, enabled]);
     const inScope = createProductScopeMatcher(products);
     const codes = new Set(
       products
@@ -312,21 +314,41 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
         { className: 'ap-board-card', 'aria-label': selected.name },
         h(
           'div',
-          { className: 'ap-card-head mps-relations-tools' },
+          { className: 'dc-card-head mps-report-heading mps-table-heading' },
           h('h3', null, selected.name),
           h(
-            'button',
-            {
-              type: 'button',
-              disabled: state.busy,
-              onClick: () => setAttempt((value) => value + 1),
-            },
-            '重新读取',
+            'div',
+            { className: 'dc-toolbar dc-report-filters mps-relations-tools' },
+            h('input', {
+              type: 'search',
+              'aria-label': '搜索关系记录',
+              placeholder: '搜索编码、名称、源字段',
+              value: search,
+              onChange: (event) => {
+                setSearch(event.target.value);
+                setPage(0);
+              },
+            }),
+            h(
+              'label',
+              null,
+              h('input', {
+                type: 'checkbox',
+                checked: onlyMissing,
+                onChange: (event) => {
+                  setOnlyMissing(event.target.checked);
+                  setPage(0);
+                },
+              }),
+              '仅缺项或待确认',
+            ),
           ),
+          openSource && h('button', { type: 'button', onClick: openSource }, '查看源表'),
           h(
             'button',
             {
-              disabled: state.busy || Boolean(state.error) || !records.length,
+              className: 'mps-download',
+              disabled: state.busy || Boolean(state.error) || !filtered.length,
               onClick: () =>
                 downloadCsv(
                   `${scope.month}-${selected.name}-完整来源.csv`,
@@ -341,30 +363,8 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
             },
             '下载完整关系明细',
           ),
-          h('input', {
-            type: 'search',
-            'aria-label': '搜索关系记录',
-            placeholder: '搜索编码、名称、源字段',
-            value: search,
-            onChange: (event) => {
-              setSearch(event.target.value);
-              setPage(0);
-            },
-          }),
-          h(
-            'label',
-            null,
-            h('input', {
-              type: 'checkbox',
-              checked: onlyMissing,
-              onChange: (event) => {
-                setOnlyMissing(event.target.checked);
-                setPage(0);
-              },
-            }),
-            '仅缺项或待确认',
-          ),
         ),
+
         state.error
           ? h('div', { className: 'ap-card-body', role: 'alert' }, state.error)
           : state.busy
@@ -428,33 +428,12 @@ export function createRelations(react, useMpsPart, { downloadCsv }) {
                     { className: 'ap-card-body', role: 'status' },
                     records.length ? '没有符合筛选的关系记录' : '源数据为空',
                   ),
-                h(
-                  'div',
-                  { className: 'mps-relations-pagination' },
-                  h(
-                    'span',
-                    null,
-                    `${selected.source} · 共${records.length}条 · 筛选${filtered.length}条 · 第${pageIndex + 1}/${Math.max(1, Math.ceil(filtered.length / 25))}页`,
-                  ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      disabled: pageIndex === 0,
-                      onClick: () => setPage(pageIndex - 1),
-                    },
-                    '上一页',
-                  ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      disabled: (pageIndex + 1) * 25 >= filtered.length,
-                      onClick: () => setPage(pageIndex + 1),
-                    },
-                    '下一页',
-                  ),
-                ),
+                renderTablePagination(h, {
+                  label: selected.name,
+                  page: pageIndex,
+                  total: filtered.length,
+                  onPageChange: setPage,
+                }),
               ),
       ),
     );

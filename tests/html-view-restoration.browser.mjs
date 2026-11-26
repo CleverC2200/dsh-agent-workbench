@@ -10,7 +10,7 @@ import { chromium, expect } from '@playwright/test';
 import { temporaryReferenceStorage } from './helpers/reference-storage.mjs';
 const { outputFiles } = await build({
   stdin: {
-    contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';window.mockSession='session-11111111-1111-4111-8111-111111111111';let viewSession='mock-session';window.setViewSession=scope=>{viewSession=scope;};const viewScope=id=>isBusinessViewPage(id)?id==='plan-category-production'?viewSession:window.mockSession:undefined;window.mockContexts={};window.mockCatalogs={};window.mockChannels={};window.mockReplies={};window.mockErrors=[];window.contextMessages=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();delete window.mockContexts[id];delete window.mockCatalogs[id];await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.rebindSession=async session=>{const id=owner.getSnapshot().selectedDocument.id;stop();window.mockSession=session;delete window.mockContexts[id];stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockChannels[id].postMessage({type:'context',context:{session,plugin:id}});};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();window.mockChannels[id]=channel.port1;window.switchViewSession=scope=>{viewSession=scope;stop();stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockSession=scope;channel.port1.postMessage({type:'context',context:{session:scope,plugin:id}});};let applied;window.applyMock=args=>new Promise(resolve=>{applied=resolve;channel.port1.postMessage({type:'apply',toolCallId:'fixture-apply',session:window.mockSession,args});});channel.port1.onmessage=({data})=>{if(data.type==='cancel')window.cancelContextTransport?.(data.id);if(data.type==='applied'){window.mockReplies[data.toolCallId]=data;applied?.(data);}if(data.type==='request'){if(id==='inventory-orderworkbench'&&['sql','workspace'].includes(data.method)){void window.orderRestoreFixture(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else if(data.method==='sql'&&id==='inventory-orderfulfillment'){const query=data.parameters.queryId;const rows=query.endsWith('.count')?[{total:0}]:query.endsWith('.summary')?[{source_orders:0,source_rows:0,matched_orders:0,overdue_orders:0,warning_orders:0}]:[];channel.port1.postMessage({type:'response',id:data.id,result:{rows,configVersion:'v1',returnedColumns:Object.keys(rows[0]??{}),rejectedColumns:[]}});}else if(data.method==='sql'&&id==='inventory-customer'){void window.customerRestoreFixture(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else{if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;window.contextMessages.push({session:data.session,context:data.parameters});if(window.hostContextTransport){void window.hostContextTransport(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:window.mockSession,plugin:id}},'*',[channel.port2]);});`,
+    contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';window.mockSession='session-11111111-1111-4111-8111-111111111111';let viewSession='mock-session',viewSubject='fixture-account-A';window.setViewSession=scope=>{viewSession=scope;};const viewScope=id=>isBusinessViewPage(id)?id==='plan-category-production'?JSON.stringify([viewSubject,viewSession]):window.mockSession:undefined;window.mockContexts={};window.mockCatalogs={};window.mockChannels={};window.mockReplies={};window.mockErrors=[];window.contextMessages=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();delete window.mockContexts[id];delete window.mockCatalogs[id];await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.rebindSession=async session=>{const id=owner.getSnapshot().selectedDocument.id;stop();window.mockSession=session;delete window.mockContexts[id];stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockChannels[id].postMessage({type:'context',context:{session,plugin:id}});};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();window.mockChannels[id]=channel.port1;window.switchViewSession=(scope,subject=viewSubject)=>{viewSession=scope;viewSubject=subject;stop();stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockSession=scope;channel.port1.postMessage({type:'context',context:{session:scope,plugin:id}});};let applied;window.applyMock=args=>new Promise(resolve=>{applied=resolve;channel.port1.postMessage({type:'apply',toolCallId:'fixture-apply',session:window.mockSession,args});});channel.port1.onmessage=({data})=>{if(data.type==='cancel')window.cancelContextTransport?.(data.id);if(data.type==='applied'){window.mockReplies[data.toolCallId]=data;applied?.(data);}if(data.type==='request'){if(id==='inventory-orderworkbench'&&['sql','workspace'].includes(data.method)){void window.orderRestoreFixture(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else if(data.method==='sql'&&id==='inventory-orderfulfillment'){const query=data.parameters.queryId;const rows=query.endsWith('.count')?[{total:0}]:query.endsWith('.summary')?[{source_orders:0,source_rows:0,matched_orders:0,overdue_orders:0,warning_orders:0}]:[];channel.port1.postMessage({type:'response',id:data.id,result:{rows,configVersion:'v1',returnedColumns:Object.keys(rows[0]??{}),rejectedColumns:[]}});}else if(data.method==='sql'&&id==='inventory-customer'){void window.customerRestoreFixture(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else{if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;window.contextMessages.push({session:data.session,context:data.parameters});if(window.hostContextTransport){void window.hostContextTransport(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:window.mockSession,plugin:id}},'*',[channel.port2]);});`,
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -722,7 +722,7 @@ test('received MPS context covers the seven current steps and preserves unassess
       )
       .toEqual([
         ...(key === 'check'
-          ? ['step:category-demand', 'step:source-inputs-parameters', 'step:source-inputs-basic']
+          ? ['step:category-demand', 'step:source-inputs-basic', 'step:source-inputs-parameters']
           : []),
         'step:' + key,
       ]);
@@ -775,7 +775,7 @@ test('received MPS context covers the seven current steps and preserves unassess
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-test('received MPS commits restored navigation and isolates restored local inputs across Sessions', async (t) => {
+test('received MPS restores Session navigation with locally saved inputs for the same account', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
@@ -808,7 +808,9 @@ test('received MPS commits restored navigation and isolates restored local input
     window.contextMessages = [];
     window.switchViewSession('session-22222222-2222-4222-8222-222222222222');
   });
-  await expect(frame.locator('.author-draft-recovery pre')).toHaveText('Session B 未发文字');
+  await expect
+    .poll(() => page.evaluate(() => window.readState('plan-category-production')?.assistantDraft))
+    .toBe('Session B 未发文字');
   await expect
     .poll(() =>
       page.evaluate(() => window.mockContexts['plan-category-production']?.parts?.navigation?.tab),
@@ -823,13 +825,16 @@ test('received MPS commits restored navigation and isolates restored local input
   for (const row of records) {
     assert.deepEqual(Object.keys(row.context.parts).sort(), ['capacity', 'navigation']);
     assert.equal(row.context.parts.navigation.tab, 'capacity');
-    assert.ok(
-      row.context.parts.capacity.rows.every(
-        (item) => item.reportQuantity === null && item.demand === null,
-      ),
-    );
-    assert.equal(JSON.stringify(row.context).includes('session-a.csv'), false);
   }
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.readState('plan-category-production')?.localDrafts?.drafts[0]?.inputs?.report
+            ?.file,
+      ),
+    )
+    .toBe('session-a.csv');
   await page.evaluate(() => {
     window.contextMessages = [];
     window.switchViewSession('mock-session');
@@ -1225,7 +1230,7 @@ test('MPS Host context remains unavailable after identity withdrawal even when a
   assert.equal(await readHost(), undefined);
 });
 
-test('received MPS isolates local files, rejects in-flight reads and restores the original Session inputs', async (t) => {
+test('received MPS keeps saved versions and local files in new Sessions and rejects in-flight imports', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
@@ -1266,7 +1271,12 @@ test('received MPS isolates local files, rejects in-flight reads and restores th
     window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
   );
   await frame.locator('body').evaluate(() => window.releaseLocalFile());
-  await expect(frame.getByLabel('评估版本选择').locator('option')).toHaveCount(1);
+  await expect(frame.getByLabel('评估版本选择', { exact: true })).toHaveValue('local-2');
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('数量合计8件');
+  await expect.poll(() => mpsProductPairs(page)).toEqual([['郑州', 'P1']]);
+  await page.evaluate(() =>
+    window.switchViewSession('session-33333333-3333-4333-8333-333333333333', 'fixture-account-B'),
+  );
   await expect
     .poll(() =>
       page.evaluate(
@@ -1283,7 +1293,7 @@ test('received MPS isolates local files, rejects in-flight reads and restores th
     false,
   );
   await expect.poll(() => mpsProductPairs(page)).toEqual([]);
-  await page.evaluate(() => window.switchViewSession('mock-session'));
+  await page.evaluate(() => window.switchViewSession('mock-session', 'fixture-account-A'));
   await expect
     .poll(() =>
       page.evaluate(
@@ -1295,6 +1305,112 @@ test('received MPS isolates local files, rejects in-flight reads and restores th
     .toBe(1);
   await expect.poll(() => mpsProductPairs(page)).toEqual([['郑州', 'P1']]);
   await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('数量合计8件');
+});
+
+test('MPS restores evaluation tables by version across Sessions without starting the solver', async (t) => {
+  const page = await fixture(t, ['mps']);
+  await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
+  const frame = page.frameLocator('iframe');
+  await seedMpsProductScope(frame, '郑州', 'P1');
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: 'report.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,P1,产品,汤圆,系列,组,8,9',
+    ),
+  });
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('数量合计8件');
+  await frame.locator('body').evaluate(() => {
+    const sqlConfig = document.createElement('script');
+    sqlConfig.id = 'agent-sql-config';
+    sqlConfig.type = 'application/json';
+    sqlConfig.textContent = '{"queries":{}}';
+    document.head.append(sqlConfig);
+    window.evaluationStarts = 0;
+    window.Worker = new Proxy(window.Worker, {
+      construct(Worker, args, owner) {
+        window.evaluationStarts++;
+        return Reflect.construct(Worker, args, owner);
+      },
+    });
+  });
+  const step = (label) => frame.locator('.ap-page-tab').filter({ hasText: label }).click();
+  const status = frame.locator('.wf-plan-status:visible');
+  const run = frame.getByRole('button', { name: '执行评估', exact: true });
+  const capacity = frame.getByRole('table', { name: '基地需求与月总产能', exact: true });
+  const supply = frame.getByRole('table', { name: '产销存汇总', exact: true });
+  await step('产能评估与缺口');
+  await run.click();
+  await expect(status).toContainText(/生成时间|本次评估失败/);
+  assert.match(
+    await status.innerText(),
+    /生成时间/,
+    (await frame.getByRole('alert').allTextContents()).join(' · '),
+  );
+  await expect(capacity).toBeVisible();
+  await expect(frame.getByText('本次评估结果未能保存，请先下载结果')).toHaveCount(0);
+  const lastStatus = await status.innerText();
+  const capacityBefore = await capacity.innerText();
+  await step('产销存报告');
+  const supplyBefore = await supply.innerText();
+
+  await page.evaluate(() =>
+    window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
+  );
+  await step('产能评估与缺口');
+  await expect.poll(() => status.innerText()).toBe(lastStatus);
+  await expect.poll(() => capacity.innerText()).toBe(capacityBefore);
+  await step('产销存报告');
+  await expect.poll(() => status.innerText()).toBe(lastStatus);
+  await expect.poll(() => supply.innerText()).toBe(supplyBefore);
+  assert.equal(await frame.locator('body').evaluate(() => window.evaluationStarts), 1);
+
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-11');
+  await expect(status).toHaveText('尚未评估');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-10');
+  await expect.poll(() => status.innerText()).toBe(lastStatus);
+  await step('需求确认');
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: 'report.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,P1,产品,汤圆,系列,组,18,19',
+    ),
+  });
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('数量合计18件');
+  await step('产销存报告');
+  await expect(status).toContainText('上次生成');
+  await expect.poll(() => supply.innerText()).toBe(supplyBefore);
+  assert.equal(await frame.locator('body').evaluate(() => window.evaluationStarts), 1);
+  await page.evaluate(() => {
+    const page = 'plan-category-production';
+    const view = window.readState(page);
+    const drafts = view.localDrafts.drafts.filter((draft) => draft.id !== 'local-1');
+    window.seedState(page, {
+      ...view,
+      localDrafts: { format: 1, selected: drafts[0].id, drafts },
+    });
+    window.switchViewSession('session-44444444-4444-4444-8444-444444444444');
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.readState('plan-category-production')?.localDrafts?.drafts.map((draft) => draft.id),
+      ),
+    )
+    .toEqual(['local-2', 'local-1']);
+  await expect(frame.getByLabel('评估月份选择', { exact: true })).toHaveValue('2026-11');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-10');
+  await step('产销存报告');
+  await expect.poll(() => status.innerText()).toBe(lastStatus);
+  await expect.poll(() => supply.innerText()).toBe(supplyBefore);
+  assert.equal(await frame.locator('body').evaluate(() => window.evaluationStarts), 1);
+  await page.evaluate(() =>
+    window.switchViewSession('session-33333333-3333-4333-8333-333333333333', 'fixture-account-B'),
+  );
+  await step('产销存报告');
+  await expect(status).toHaveText('尚未评估');
+  await expect(supply).toHaveCount(0);
 });
 
 for (const boundary of ['Session', 'identity']) {
@@ -1325,7 +1441,7 @@ for (const boundary of ['Session', 'identity']) {
         name: '',
         exact: true,
       }),
-    ).toContainText('正在读取或校验输入');
+    ).toContainText('正在读取发货数据');
     if (boundary === 'Session')
       await page.evaluate(() =>
         window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),

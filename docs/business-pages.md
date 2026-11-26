@@ -26,6 +26,8 @@
 
 MPS 页面 `plan-category-production` 接收 `inventory-mps` 资源，构建从相邻 Manage 装配。当前事实、七步评估和缺失规则的边界见[页面上下文](../static/mps/source/context.js)，本地草稿按[呈现恢复合同](presentation-recovery.md)处理，业务来源重新读取。CSV 下载和本地恢复不等于正式业务保存；正式保存、提交和结转仍保留未完成验收，实际客户端与业务结果须由对应输入的回执证明。
 
+修改 MPS 的折叠区、表格工具栏或说明入口时，读 [MPS 桌面页面设计](mps-ui-design.md)。
+
 页侧恢复合同见[呈现恢复](presentation-recovery.md)，view 动作的影响范围与授权见[页面桥](page-interaction.md)。
 
 ## 验收边界

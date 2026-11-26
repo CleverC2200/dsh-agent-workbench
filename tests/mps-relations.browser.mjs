@@ -257,14 +257,15 @@ test('fourth MPS step clears records on failed refresh and discards a late resul
     return result;
   });
   await expect(view).toContainText('共27条');
+  const refresh = frame.locator('.dc-page-head').getByRole('button', { name: '刷新', exact: true });
   denied = true;
-  await view.getByRole('button', { name: '重新读取', exact: true }).click();
+  await refresh.click();
   await expect(view.getByRole('alert')).toHaveText('当前账号暂无数据权限');
   await expect(view.locator('tbody tr')).toHaveCount(0);
   denied = false;
   hold = true;
   const before = calls.filter((query) => query.queryId === 'transfers.detail').length;
-  await view.getByRole('button', { name: '重新读取', exact: true }).click();
+  await refresh.click();
   await expect
     .poll(() => calls.filter((query) => query.queryId === 'transfers.detail').length)
     .toBeGreaterThan(before);

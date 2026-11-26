@@ -1,31 +1,24 @@
+import { downloadWorkbook } from './workbook.js';
+import { renderTablePagination } from './report-page.js';
 import { categoryHistoryMonths, historyComparisonMonths } from './category-history-periods.js';
 import { matchesCategories, createDimensionCategoryMatcher } from './category-filter.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { buildCategoryDemand } from './category-demand.js';
-import { categorySourceInputs } from './category-source-inputs.js';
 import { festivalDemandBasis } from './festival-demand.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createPlanRates } from './plan-rate-view.js';
 import { hasMpsSource } from './master-data.js';
 import { readFactMonth, readHistoryAnnual, readHistoryWindow } from './facts.js';
-import { hasSourceCalculation, readSourceTable } from './source-tables.js';
+import { readSourceTable } from './source-tables.js';
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { sourceCheckRows, sourceProductMappings } from './source-projections.js';
 import { createGrowthAnomalyReport, growthSourceAnomalies } from './growth-anomaly-report.js';
-import { readFailureText } from './mps-read.js';
+import { cancelOnSourceReset, readFailureText } from './mps-read.js';
 
 const monthOffset = (month, offset) => {
   const date = new Date(month + '-01T00:00:00Z');
   date.setUTCMonth(date.getUTCMonth() + offset);
   return date.toISOString().slice(0, 7);
-};
-const cancelOnSourceReset = (cancel) => {
-  const events = ['gea-session-changing', 'gea-identity-changed', 'pagehide'];
-  for (const name of events) window.addEventListener(name, cancel);
-  return () => {
-    for (const name of events) window.removeEventListener(name, cancel);
-    cancel();
-  };
 };
 const demandSourcePriority = 3;
 const shareInputs = [
@@ -104,9 +97,6 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
     const [base, setBase] = react.useState('');
     const controller = react.useRef(null);
     const appliedRetry = react.useRef(retry);
-    const exportController = react.useRef(null);
-    const [sourceExport, setSourceExport] = react.useState(null);
-    react.useEffect(() => cancelOnSourceReset(() => exportController.current?.abort()), []);
     const [historyReadAttempt, retryHistoryDetails] = react.useReducer((attempt) => attempt + 1, 0);
     const recentDemandRead = draft.sourceChecksRead;
     const recentDemandSettled =
@@ -677,9 +667,10 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         三月占比合计: percent(basis?.recentShare),
         全年预估: number(basis?.annualEstimate),
         达成率: percent(basis?.achievementRate),
-        核对说明: issues.join('；') || (current ? '按当前产品池SKU归类' : '尚未读取核对窗口'),
+        核对说明: issues.join('；'),
       };
     });
+    const showCheckIssues = basicRows.some((row) => row.核对说明);
     useMpsPart(
       react,
       'source-inputs-' + kind,
@@ -720,94 +711,18 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           className: 'dc-card dc-results',
           'aria-label': '大类基础指标源值核对',
         },
-        h('div', { className: 'dc-card-head' }, h('h3', {}, '大类基础指标 · 源值核对')),
         h(
           'div',
-          { className: 'dc-source-body' },
+          { className: 'dc-card-head mps-report-heading mps-table-heading' },
+          h('h3', {}, '大类基础指标 · 源值核对'),
+          h('span', { className: 'mps-report-period' }, `${calculated.recent[0]} 至 ${endMonth}`),
           h(
             'div',
-            { className: 'dc-toolbar' },
-            h(
-              'label',
-              {},
-              '核对截止月份',
-              h('input', {
-                type: 'month',
-                'aria-label': '源值核对截止月份',
-                value: endMonth,
-                readOnly: true,
-                title: '由评估月份与提报口径确定，与逐月测算使用同一窗口',
-              }),
-            ),
-            h('span', {}, `${calculated.recent[0]} 至 ${endMonth}`),
+            { className: 'mps-report-actions' },
             h(
               'button',
               { disabled: !active || !hasMpsSource() || busy, onClick: load },
               busy ? '读取中…' : '读取三月源值',
-            ),
-            h(
-              'button',
-              {
-                disabled: !current,
-                onClick: () =>
-                  downloadCsv(
-                    `大类基础源值核对-${calculated.recent[0]}至${endMonth}.csv`,
-                    [
-                      '评估版本',
-                      '评估月份',
-                      '源月份',
-                      '源分类',
-                      '计划量口径',
-                      'BI源数量',
-                      '计划源数量',
-                      'BI已知小计',
-                      '计划已知小计',
-                      '核对比值',
-                      '核对说明',
-                    ],
-                    checks.rows.map((row) => ({
-                      评估版本: draft.name,
-                      评估月份: draft.month,
-                      源月份: row.month,
-                      源分类: row.category,
-                      计划量口径: checks.column,
-                      BI源数量: row.actual.quantity ?? '',
-                      计划源数量: row.plan.quantity ?? '',
-                      BI已知小计: row.actual.knownQuantity ?? '',
-                      计划已知小计: row.plan.knownQuantity ?? '',
-                      核对比值: row.ratio ?? '',
-                      核对说明: row.issues.join('；'),
-                    })),
-                  ),
-              },
-              '下载源值核对',
-            ),
-            h(
-              'button',
-              {
-                disabled: !current || !checks.excluded.length,
-                onClick: () =>
-                  downloadCsv(
-                    '产品池外待补清单.csv',
-                    [
-                      '月份',
-                      '来源',
-                      '基地',
-                      '产品编码',
-                      '当前产品编码',
-                      '产品名称',
-                      '大类',
-                      '数量',
-                      '计划数量',
-                      '已知计划数量',
-                      '源计划数量',
-                      '缺项原因',
-                      '原因',
-                    ],
-                    checks.excluded,
-                  ),
-              },
-              `下载池外待补清单（${checks.excluded.length}条）`,
             ),
             h(
               'button',
@@ -818,54 +733,96 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   setPage(0);
                 },
               },
-              `查看异常与来源明细（${basicAnomalies.length}条异常，共${checks.details.length}条）`,
+              `查看明细（${basicAnomalies.length}条异常）`,
             ),
             h(
               'button',
               {
-                disabled: !current,
-                onClick: () =>
-                  downloadCsv(
-                    `基础核对完整来源-${calculated.recent[0]}至${endMonth}.csv`,
+                className: 'mps-download',
+                disabled: !current || (!checks.rows.length && !checks.details.length),
+                onClick: () => {
+                  const detailColumns = [
+                    '月份',
+                    '来源',
+                    '基地',
+                    '产品编码',
+                    '当前产品编码',
+                    '产品名称',
+                    '大类',
+                    '系列',
+                    '物料组',
+                    '源大类',
+                    '源系列',
+                    '数量',
+                    '计划数量',
+                    '已知计划数量',
+                    '源计划数量',
+                    '源记录数',
+                    '缺数量条数',
+                    '重复键条数',
+                    '源日期开始',
+                    '源日期结束',
+                    '原因',
+                  ];
+                  const withReason = (row) => ({
+                    ...row,
+                    原因: [...new Set([row['原因'], row['缺项原因']].filter(Boolean))].join('；'),
+                  });
+                  return downloadWorkbook(
+                    `大类基础源值核对-${calculated.recent[0]}至${endMonth}.xlsx`,
                     [
-                      '月份',
-                      '来源',
-                      '基地',
-                      '产品编码',
-                      '当前产品编码',
-                      '产品名称',
-                      '大类',
-                      '系列',
-                      '物料组',
-                      '源大类',
-                      '源系列',
-                      '数量',
-                      '计划数量',
-                      '已知计划数量',
-                      '源计划数量',
-                      '源记录数',
-                      '缺数量条数',
-                      '重复键条数',
-                      '源日期开始',
-                      '源日期结束',
-                      '原因',
-                      '缺项原因',
-                    ],
-                    checks.details,
-                  ),
+                      {
+                        name: '月度核对',
+                        columns: [
+                          '评估版本',
+                          '评估月份',
+                          '源月份',
+                          '源分类',
+                          'BI源数量',
+                          '计划源数量',
+                          'BI已知小计',
+                          '计划已知小计',
+                          '核对比值',
+                        ],
+                        rows: checks.rows.map((row) => ({
+                          评估版本: draft.name,
+                          评估月份: draft.month,
+                          源月份: row.month,
+                          源分类: row.category,
+                          BI源数量: row.actual.quantity,
+                          计划源数量: row.plan.quantity,
+                          BI已知小计:
+                            row.actual.quantity === null ? row.actual.knownQuantity : null,
+                          计划已知小计: row.plan.quantity === null ? row.plan.knownQuantity : null,
+                          核对比值: row.ratio,
+                        })),
+                      },
+                      {
+                        name: '来源明细',
+                        columns: detailColumns,
+                        rows: checks.details.map(withReason),
+                      },
+                      {
+                        name: '池外待补',
+                        columns: detailColumns,
+                        rows: checks.excluded.map(withReason),
+                      },
+                    ].filter(({ rows }) => rows.length),
+                  );
+                },
               },
-              '下载完整来源明细',
+              '下载源值核对',
             ),
           ),
-          h(
-            'p',
-            { className: 'dc-muted' },
-            'BI实绩与计划量按所示三个月核对。计划量取ai_db.agents_scm_dws_scm_cust_plan_exe_di.allnum（件），按源日期所属月核对。达成率＝三月BI实绩÷三月计划量。各来源优先按当前编码、再按唯一老品编码归类，保留原始产品编码。池外仅过滤真实源数量为0或空且无源异常的记录，其余含负数另列清单供核对，不自动参与求解，池内缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
-          ),
-          state?.error && h('p', { role: 'alert' }, state.error),
-          draft.historyAnnualRead?.error &&
-            h('p', { role: 'alert' }, draft.historyAnnualRead.error),
         ),
+        (state?.error || draft.historyAnnualRead?.error) &&
+          h(
+            'div',
+            { className: 'dc-source-body' },
+            state?.error && h('p', { role: 'alert' }, state.error),
+            draft.historyAnnualRead?.error &&
+              h('p', { role: 'alert' }, draft.historyAnnualRead.error),
+          ),
         table(
           [
             '大类或源分类',
@@ -875,7 +832,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             '三月占比合计',
             '全年预估',
             '达成率',
-            '核对说明',
+            ...(showCheckIssues ? ['核对说明'] : []),
           ],
           basicRows,
         ),
@@ -886,12 +843,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               title: preview,
               close: () => setPreview(null),
               className: 'dc-source-detail',
-              footer: h('button', { onClick: () => setPreview(null) }, '关闭'),
             },
             h(
               'p',
               null,
-              `${calculated.recent[0]}至${endMonth}；共${checks.details.length}条，其中异常${basicAnomalies.length}条，异常优先。预览每页25条，完整下载包含全部记录及读取失败。`,
+              `核对期间 ${calculated.recent[0]}至${endMonth} · 异常${basicAnomalies.length}条`,
             ),
             table(
               [
@@ -911,106 +867,18 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               ],
               basicDetails.slice(page * 25, (page + 1) * 25),
             ),
-            h(
-              'button',
-              { disabled: page === 0, onClick: () => setPage(page - 1) },
-              '上一页来源明细',
-            ),
-            h(
-              'button',
-              {
-                disabled: (page + 1) * 25 >= checks.details.length,
-                onClick: () => setPage(page + 1),
-              },
-              '下一页来源明细',
-            ),
+            renderTablePagination(h, {
+              label: '异常与来源明细',
+              page,
+              total: basicDetails.length,
+              onPageChange: setPage,
+              buttonLabels: ['上一页来源明细', '下一页来源明细'],
+            }),
           ),
       );
-    const hasSourceRows = [...categorySources.sourceCategories].some((category) =>
-      matchesCategories(category, selectedCategories),
-    );
-    const exportSourceDetails = async () => {
-      const stop = new AbortController();
-      exportController.current = stop;
-      setSourceExport({ loading: true });
-      try {
-        const { periods, annual } = draft.historicalIndicators;
-        const [fullPeriods, fullAnnual] = await Promise.all([
-          Promise.all(
-            periods.map(async (entry) =>
-              entry.metadata?.projection === 'calculation' ||
-              (entry.error && hasSourceCalculation('category-history'))
-                ? {
-                    month: entry.month,
-                    ...(await readSourceTable(
-                      'category-history',
-                      entry.month,
-                      stop.signal,
-                      entry.metadata?.requestedMonths,
-                      -1,
-                      { full: true },
-                    )),
-                  }
-                : entry,
-            ),
-          ),
-          annual.metadata?.projection === 'calculation' ||
-          (annual.error && hasSourceCalculation('annual-pool'))
-            ? readAnnualPool(false, { full: true })
-            : annual,
-        ]);
-        stop.signal.throwIfAborted();
-        const rows = categorySourceInputs({
-          ...draft,
-          historicalIndicators: { periods: fullPeriods, annual: fullAnnual },
-        })
-          .readSourceRows()
-          .filter((row) => matchesCategories(row['大类'], selectedCategories));
-        downloadCsv(
-          `${draft.month}-大类池内源明细.csv`,
-          [
-            '来源',
-            '月份',
-            '基地',
-            '产品编码',
-            '大类',
-            '数量',
-            '原始来源数量',
-            '财年',
-            '原始全国SKU财年量',
-            '基地SKU财年量',
-            '财年源月份数',
-            '财年有效月份数',
-            '池内大类财年量',
-            '财年缺失或冲突月份',
-            '财年核对异常',
-            '上年同期发货数量',
-            '上月发货数量',
-            '取数依据',
-            '缺项原因',
-          ],
-          rows,
-        );
-        setSourceExport(null);
-      } catch (error) {
-        if (!stop.signal.aborted) {
-          stop.abort();
-          setSourceExport({ error: error.message });
-        }
-      }
-    };
     return h(
       react.Fragment,
       {},
-      h(
-        'button',
-        {
-          disabled: !current || !hasSourceRows || sourceExport?.loading,
-          onClick: exportSourceDetails,
-        },
-        sourceExport?.loading ? '正在导出大类池内源明细…' : '下载大类池内源明细',
-      ),
-      sourceExport?.error && h('p', { role: 'alert' }, sourceExport.error),
       h(
         'div',
         { className: 'dc-parameter-grid', role: 'region', 'aria-label': '系统派生口径参数' },
@@ -1104,7 +972,50 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             title: preview + ' · 源值核对',
             className: !isShare || showLayers || showExcluded ? 'dc-source-detail' : undefined,
             close: () => setPreview(null),
-            footer: h('button', { onClick: () => setPreview(null) }, '关闭'),
+            footer: h(
+              'button',
+              {
+                className: 'mps-download',
+                disabled:
+                  !previewRows.length &&
+                  (isShare || (!summaryRows.length && !comparisonRows.length)),
+                onClick: () =>
+                  downloadWorkbook(
+                    `${preview}-源值核对.xlsx`,
+                    [
+                      {
+                        name: '来源明细',
+                        columns: isShare && !showExcluded ? shareColumns : previewColumns,
+                        rows:
+                          isShare && !showExcluded
+                            ? shareRows.map((row, index) => ({
+                                ...row,
+                                提报占比: shares[index].reportShare ?? '',
+                                历史占比: shares[index].historyShare ?? '',
+                                提报物料组占比: shares[index].reportLayers.groupShare ?? '',
+                                提报产品占比: shares[index].reportLayers.skuShare ?? '',
+                                提报基地占比: shares[index].reportLayers.baseShare ?? '',
+                                历史物料组占比: shares[index].historyLayers.groupShare ?? '',
+                                历史产品占比: shares[index].historyLayers.skuShare ?? '',
+                                历史基地占比: shares[index].historyLayers.baseShare ?? '',
+                              }))
+                            : previewRows,
+                      },
+                      ...(!isShare
+                        ? [
+                            { name: '指标结果', columns: summaryColumns, rows: summaryRows },
+                            {
+                              name: '分子分母',
+                              columns: comparisonColumns,
+                              rows: comparisonRows,
+                            },
+                          ]
+                        : []),
+                    ].filter(({ rows }) => rows.length),
+                  ),
+              },
+              '下载源值',
+            ),
           },
           h(
             'p',
@@ -1197,30 +1108,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               ),
             ),
           !isShare && table(summaryColumns, summaryRows),
-          !isShare &&
-            h(
-              'button',
-              {
-                disabled: !summaryRows.length,
-                onClick: () => downloadCsv(preview + '-指标结果.csv', summaryColumns, summaryRows),
-              },
-              '下载指标结果',
-            ),
           !isShare && table(comparisonColumns, comparisonRows),
-          !isShare &&
-            h(
-              'button',
-              {
-                disabled: !comparisonRows.length,
-                onClick: () =>
-                  downloadCsv(
-                    `${draft.month}-${preview}分子分母.csv`,
-                    comparisonColumns,
-                    comparisonRows,
-                  ),
-              },
-              `下载${metric.field === 'yoy' ? '同比' : metric.field === 'mom' ? '环比' : '月占比'}分子分母`,
-            ),
           table(previewColumns, previewRows.slice(pageIndex * 25, (pageIndex + 1) * 25)),
           !previewRows.length &&
             h(
@@ -1232,45 +1120,12 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   ? '当前筛选没有可用源记录，请查看读取状态或更换筛选。'
                   : '尚未读取当前评估月的三年源记录，请先同步历史源值。',
             ),
-          h(
-            'div',
-            { className: 'dc-pagination' },
-            h('span', {}, `共${previewRows.length}条，第${pageIndex + 1}页`),
-            h('button', { disabled: !pageIndex, onClick: () => setPage(pageIndex - 1) }, '上一页'),
-            h(
-              'button',
-              {
-                disabled: (pageIndex + 1) * 25 >= previewRows.length,
-                onClick: () => setPage(pageIndex + 1),
-              },
-              '下一页',
-            ),
-            h(
-              'button',
-              {
-                disabled: !previewRows.length,
-                onClick: () =>
-                  downloadCsv(
-                    preview + '-源值核对.csv',
-                    isShare && !showExcluded ? shareColumns : previewColumns,
-                    isShare && !showExcluded
-                      ? shareRows.map((row, index) => ({
-                          ...row,
-                          提报占比: shares[index].reportShare ?? '',
-                          历史占比: shares[index].historyShare ?? '',
-                          提报物料组占比: shares[index].reportLayers.groupShare ?? '',
-                          提报产品占比: shares[index].reportLayers.skuShare ?? '',
-                          提报基地占比: shares[index].reportLayers.baseShare ?? '',
-                          历史物料组占比: shares[index].historyLayers.groupShare ?? '',
-                          历史产品占比: shares[index].historyLayers.skuShare ?? '',
-                          历史基地占比: shares[index].historyLayers.baseShare ?? '',
-                        }))
-                      : previewRows,
-                  ),
-              },
-              '下载源值',
-            ),
-          ),
+          renderTablePagination(h, {
+            label: preview,
+            page: pageIndex,
+            total: previewRows.length,
+            onPageChange: setPage,
+          }),
         ),
     );
   };

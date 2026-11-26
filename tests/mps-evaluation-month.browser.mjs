@@ -169,44 +169,78 @@ function completeSystemSource(query) {
     : response;
 }
 
-test('标题旁月份入口只列实际本月及后两个月，选择后不扩张并跨月跨年顺延', async (t) => {
-  const page = await authorPage(t);
-  await page.clock.install({ time: new Date('2026-11-30T12:00:00+08:00') });
+test('页头版本跟随月份并显示短名，可新建月份跨年顺延', async (t) => {
+  const page = await authorPage(t, { time: '2026-11-30T12:00:00+08:00' });
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
   const month = frame.getByRole('combobox', { name: '评估月份选择', exact: true });
   await expect(month).toBeVisible();
-  await expect(month.locator('option:enabled')).toHaveText(['2026-11', '2026-12', '2027-01']);
+  await expect(month.locator(':scope > option:enabled')).toHaveText([
+    '2026-11',
+    '2026-12',
+    '2027-01',
+  ]);
   await expect(month).toHaveValue('2026-11');
   await month.selectOption('2027-01');
   await expect(month).toHaveValue('2027-01');
-  await expect(month.locator('option:enabled')).toHaveText(['2026-11', '2026-12', '2027-01']);
-  await expect(frame.getByLabel('评估版本选择').locator('option:checked')).toContainText('2027-01');
+  await expect(month.locator(':scope > option:enabled')).toHaveText([
+    '2026-11',
+    '2026-12',
+    '2027-01',
+  ]);
+  const versions = frame.getByRole('combobox', { name: '评估版本选择', exact: true });
+  await expect(versions.locator('option')).toHaveText(['第2版']);
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const newVersion = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await newVersion.getByLabel('评估月份', { exact: true }).fill('2027-01');
+  const fullName = '1月滚动评估 · DEV 下市品验收';
+  await newVersion.getByLabel('版本名称', { exact: true }).fill(fullName);
+  await newVersion.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await expect(versions.locator('option')).toHaveText(['第2版', 'DEV 下市品验收']);
+  assert.ok((await versions.boundingBox()).width <= 136);
+  await expect
+    .poll(() => page.evaluate(() => window.readView()?.localDrafts?.drafts.at(-1)?.name))
+    .toBe(fullName);
+  await versions.selectOption('local-2');
+  await expect(month).toHaveValue('2027-01');
   for (const [date, expected] of [
     ['2026-12-01', ['2026-12', '2027-01', '2027-02']],
     ['2027-01-01', ['2027-01', '2027-02', '2027-03']],
   ]) {
     await month.focus();
-    await page.clock.setSystemTime(new Date(`${date}T12:00:00+08:00`));
+    await page.clock.setFixedTime(new Date(`${date}T12:00:00+08:00`));
     await month.press('Escape');
-    await expect(month.locator('option:enabled')).toHaveText(expected);
+    await expect(month.locator(':scope > option:enabled')).toHaveText(expected);
     await month.focus();
-    await expect(month.locator('option:enabled')).toHaveText(expected);
+    await expect(month.locator(':scope > option:enabled')).toHaveText(expected);
     await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
     const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
     const input = dialog.getByLabel('评估月份', { exact: true });
-    await expect(input).toHaveAttribute('min', expected[0]);
-    await expect(input).toHaveAttribute('max', expected[2]);
+    await input.fill(expected[0]);
+    await dialog.getByRole('button', { name: '打开月份选择', exact: true }).click();
+    const panel = dialog.locator('.mps-month-panel');
+    for (const year of new Set(expected.map((period) => period.slice(0, 4)))) {
+      if (year !== expected[0].slice(0, 4))
+        await panel.getByRole('button', { name: '下一年' }).click();
+      await expect(panel.locator('.mps-month-options > button:enabled')).toHaveText(
+        expected
+          .filter((period) => period.startsWith(year))
+          .map((period) => `${Number(period.slice(5))}月`),
+      );
+    }
+    await input.press('Escape');
     await input.fill('2027-04');
     await expect(dialog.getByRole('button', { name: '创建本地版本', exact: true })).toBeDisabled();
     await dialog.getByRole('button', { name: '取消', exact: true }).click();
   }
-  assert.equal(await frame.getByLabel('评估版本选择').locator('option').count(), 2);
+  await month.selectOption('2026-11');
+  await expect(versions.locator('option')).toHaveText(['第1版']);
 });
 
 test('月份切换贯通取数、需求计算和下载，保留历史版本、修正历史与Core草稿', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, source);
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  const { page, frame, calls } = await mpsPage(t, config, source, {
+    time: '2026-11-17T12:00:00+08:00',
+  });
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-11');
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(report).toContainText('数量合计11件');
@@ -292,7 +326,7 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
   const exported = JSON.parse(await mpsDownloadText(await downloaded.path()));
   assert.equal(exported.draft.month, '2027-01');
   assert.equal(exported.draft.report.find((row) => row['月份'] === '2027-01')['月初数量'], 91);
-  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-11');
   await expect(report).toContainText('数量合计123件');
@@ -325,11 +359,12 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
   );
   assert.ok(restoredJanuary.every((row) => row.评估月份 === '2027-01'));
   await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
-  await frame.getByLabel('评估版本选择').selectOption('legacy-october');
-  await expect(frame.getByLabel('评估月份选择').locator('option:checked')).toHaveText(
-    '历史月份 · 2026-10',
-  );
-  await expect(frame.getByLabel('评估月份选择').locator('option:enabled')).toHaveText([
+  const month = frame.getByLabel('评估月份选择', { exact: true });
+  await expect(month.locator('optgroup[label="已保存月份"] option')).toHaveText(['2026-10']);
+  await month.selectOption('2026-10');
+  await expect(month).toHaveValue('2026-10');
+  await expect(frame.getByLabel('评估版本选择').locator('option')).toHaveText(['十月历史草稿']);
+  await expect(month.locator(':scope > option:enabled')).toHaveText([
     '2026-11',
     '2026-12',
     '2027-01',
@@ -344,8 +379,9 @@ test('月份切换贯通取数、需求计算和下载，保留历史版本、�
 });
 
 test('两个评估月的完整来源驱动系统有效需求，期间切换与回切不复用结果', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, completeSystemSource);
-  await page.clock.install({ time: new Date('2026-11-17T12:00:00+08:00') });
+  const { page, frame, calls } = await mpsPage(t, config, completeSystemSource, {
+    time: '2026-11-17T12:00:00+08:00',
+  });
   const results = [];
   for (const [month, previous, cutoff, expected] of [
     ['2026-11', '2026-10', '2026-10-31', 110],

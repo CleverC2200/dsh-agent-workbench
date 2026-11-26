@@ -392,7 +392,7 @@ test('版本切换后的迟到金额响应不覆盖新版本，切回旧版本�
   await expect(source).toContainText('最终计划总金额：120.00元');
   releaseOld();
   await expect(source).not.toContainText('990.00元');
-  await frame.getByLabel('评估版本选择', { exact: true }).selectOption('local-1');
+  await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-11');
   await expect(source).toContainText('最终计划总金额：990.00元');
   await expect(source).not.toContainText('120.00元');
 });

@@ -75,19 +75,15 @@ async function draft(page) {
     return state.drafts.find((row) => row.id === state.selected);
   });
 }
-async function begin(view) {
-  await view
-    .locator('body')
-    .page()
-    .frameLocator('iframe')
+async function begin(frame) {
+  await frame
+    .locator('.dc-adjustment-actions')
     .getByRole('button', { name: '调整', exact: true })
     .click();
 }
-async function save(view) {
-  await view
-    .locator('body')
-    .page()
-    .frameLocator('iframe')
+async function save(frame) {
+  await frame
+    .locator('.dc-adjustment-actions')
     .getByRole('button', { name: '保存调整', exact: true })
     .click();
 }
@@ -106,7 +102,7 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
   const original = (await draft(page)).shipment;
   await expandShipmentBase(frame, '郑州');
   await expect(view.locator('.mps-batch-input')).toHaveCount(0);
-  await begin(view);
+  await begin(frame);
   await view.getByLabel('全国合计 整月预估发货', { exact: true }).fill('101');
   await view.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('40');
   assert.deepEqual((await draft(page)).shipment, original);
@@ -117,19 +113,24 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
   await expect(switchHint).toBeVisible();
   await expect(frame.getByLabel('评估月份选择', { exact: true })).toBeDisabled();
   await expect(frame.getByLabel('评估版本选择', { exact: true })).toBeDisabled();
-  await view.getByRole('button', { name: '取消', exact: true }).click();
+  await frame
+    .locator('.dc-adjustment-actions')
+    .getByRole('button', { name: '取消', exact: true })
+    .click();
   await expect(switchHint).toHaveCount(0);
   await expect(frame.getByLabel('评估版本选择', { exact: true })).toBeEnabled();
   assert.deepEqual((await draft(page)).shipment, original);
-  await begin(view);
+  await begin(frame);
   await view.getByLabel('郑州 剩余天数入库', { exact: true }).fill('-1');
-  await save(view);
-  await expect(view.getByRole('alert')).toContainText('不能小于0');
+  await save(frame);
+  await expect(frame.locator('.dc-adjustment-actions').getByRole('alert')).toContainText(
+    '不能小于0',
+  );
   assert.deepEqual((await draft(page)).shipment, original);
   await view.getByLabel('郑州 剩余天数入库', { exact: true }).fill('11');
   await view.getByLabel('全国合计 整月预估发货', { exact: true }).fill('101');
   await view.getByLabel('郑州 A 整月预估发货', { exact: true }).fill('40');
-  await save(view);
+  await save(frame);
   await expect
     .poll(async () => (await draft(page)).shipment?.values?.[JSON.stringify(['郑州', 'A'])]?.value)
     .toBe(40);
@@ -139,10 +140,10 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
   await expect(
     view.getByRole('button', { name: '郑州 A 整月预估发货 计算过程', exact: true }),
   ).toHaveText('40');
-  await begin(view);
+  await begin(frame);
   await view.getByLabel('全国合计 整月预估发货', { exact: true }).fill('');
   await view.getByLabel('郑州 剩余天数入库', { exact: true }).fill('');
-  await save(view);
+  await save(frame);
   await expect.poll(async () => Object.keys((await draft(page)).shipment.values).length).toBe(0);
   assert.deepEqual((await draft(page)).shipment.values, {});
   assert.deepEqual((await draft(page)).shipment.remaining, {});
@@ -150,6 +151,7 @@ test('shipment stages multiple hierarchy edits atomically, cancels across pages 
 
 test('processing saves multiple base SKU months atomically and keeps other bases unchanged', async (t) => {
   const { page, frame } = await setup(t);
+  const actions = frame.locator('.dc-adjustment-actions');
   await seedLeafQuantities(
     frame,
     ['2026-12', '2027-01'].flatMap((month) =>
@@ -172,7 +174,7 @@ test('processing saves multiple base SKU months atomically and keeps other bases
   const view = await step(frame, '需求加工与收敛');
   await view.getByLabel('搜索当前步骤').fill('A');
   const original = (await draft(page)).adjustments;
-  await begin(view);
+  await begin(frame);
   await expect(
     view.getByRole('textbox', { name: '汤圆 2026-12 需求数量', exact: true }),
   ).toHaveCount(0);
@@ -180,12 +182,12 @@ test('processing saves multiple base SKU months atomically and keeps other bases
   const second = view.getByLabel('汤圆 组 A 郑州 2027-01 需求数量', { exact: true });
   await first.fill('50.75');
   await second.fill('220');
-  await save(view);
-  await expect(frame.getByRole('alert')).toContainText('调整原因');
+  await save(frame);
+  await expect(actions.getByRole('alert')).toContainText('调整原因');
   assert.deepEqual((await draft(page)).adjustments, original);
-  await selectAdjustmentReason(view, '同批调整两处');
-  await save(view);
-  await expect(frame.getByRole('alert')).toHaveCount(0);
+  await selectAdjustmentReason(frame, '同批调整两处');
+  await save(frame);
+  await expect(actions.getByRole('alert')).toHaveCount(0);
   await expect
     .poll(
       async () =>
@@ -209,9 +211,9 @@ test('processing saves multiple base SKU months atomically and keeps other bases
     60,
   );
   assert.ok(changed.history.every((row) => row.reason === '其他：同批调整两处'));
-  await begin(view);
+  await begin(frame);
   await first.fill('999');
-  await frame.getByRole('button', { name: '取消', exact: true }).click();
+  await actions.getByRole('button', { name: '取消', exact: true }).click();
   assert.deepEqual((await draft(page)).adjustments, changed);
 });
 
@@ -222,7 +224,7 @@ test('configuration stages calendar, weights, rules and resources together; inva
   await view.locator('summary').filter({ hasText: '高级配置：' }).click();
   await expect(view.locator('.mps-batch-input')).toHaveCount(0);
   const original = await draft(page);
-  await begin(view);
+  await begin(frame);
   await view.getByLabel('郑州 A 补充目标周转天数', { exact: true }).fill('7');
   await view.getByLabel('郑州 2026-12 生产天数', { exact: true }).fill('32');
   await view.getByLabel('郑州 A 件吨系数', { exact: true }).fill('0.123456789');
@@ -230,12 +232,14 @@ test('configuration stages calendar, weights, rules and resources together; inva
   await view.getByLabel('资源1 名称', { exact: true }).fill('验收隧道');
   await view.getByLabel('资源1 日产吨数', { exact: true }).fill('8');
   await view.locator('summary').filter({ hasText: '高级配置：' }).click();
-  await save(view);
-  await expect(view.getByRole('alert')).toContainText('生产天数');
+  await save(frame);
+  await expect(frame.locator('.dc-adjustment-actions').getByRole('alert')).toContainText(
+    '生产天数',
+  );
   assert.deepEqual(await draft(page), original);
   await expect(view.getByLabel('郑州 2026-12 生产天数', { exact: true })).toBeVisible();
   await view.getByLabel('郑州 2026-12 生产天数', { exact: true }).fill('15');
-  await save(view);
+  await save(frame);
   await expect
     .poll(
       async () =>
@@ -258,15 +262,21 @@ test('configuration stages calendar, weights, rules and resources together; inva
     0.123456789,
   );
   assert.equal(saved.resources[0].dailyTons, 8);
-  await begin(view);
+  await begin(frame);
   await view.getByLabel('郑州 A 补充目标周转天数', { exact: true }).fill('999');
   await view.getByRole('button', { name: '删除资源1', exact: true }).click();
-  await view.getByRole('button', { name: '取消', exact: true }).click();
+  await frame
+    .locator('.dc-adjustment-actions')
+    .getByRole('button', { name: '取消', exact: true })
+    .click();
   assert.deepEqual(await draft(page), saved);
 });
 
 test('seven pages retain readable compact headers and contained toolbars at desktop and narrow widths', async (t) => {
   const { page, frame } = await setup(t);
+  const header = frame.locator('.dc-page-head');
+  const actions = header.locator('.dc-version-actions > .dc-adjustment-actions:last-child');
+  const adjust = { name: '调整', exact: true };
   for (const width of [1200, 720]) {
     await page.evaluate((width) => {
       document.getElementById('root').style.width = `${width + 520}px`;
@@ -283,6 +293,12 @@ test('seven pages retain readable compact headers and contained toolbars at desk
       await frame.locator('.ap-page-tab').filter({ hasText: name }).click();
       await expect(frame.getByRole('heading', { name, exact: true }).first()).toBeVisible();
       await expect(frame.getByRole('button', { name: /^下一步[:：]/ })).toHaveCount(0);
+      const adjustmentCount = ['本月预估发货', '需求加工与收敛', '约束与配置'].includes(name)
+        ? 1
+        : 0;
+      await expect(header.getByText('本地草稿', { exact: true })).toHaveCount(0);
+      await expect(actions.getByRole('button', adjust)).toHaveCount(adjustmentCount);
+      await expect(frame.getByRole('button', adjust)).toHaveCount(adjustmentCount);
       const toolbar = frame.locator('.wf-toolbar:visible').first();
       if (await toolbar.count()) {
         const bounds = await toolbar.boundingBox();
@@ -295,18 +311,20 @@ test('seven pages retain readable compact headers and contained toolbars at desk
           assert.ok(bounds.height <= 84, `filter toolbar height ${bounds.height}`);
       }
       if (name === '需求加工与收敛') {
-        const view = frame.getByRole('region', { name, exact: true });
-        await begin(view);
-        const editedBounds = await toolbar.boundingBox();
-        assert.ok(
-          editedBounds.height <= (width === 1200 ? 104 : 140),
-          `editing toolbar height ${editedBounds.height}`,
-        );
+        await begin(frame);
+        const headerBounds = await header.boundingBox();
+        for (const label of ['保存调整', '取消']) {
+          const button = actions.getByRole('button', { name: label, exact: true });
+          await expect(button).toBeVisible();
+          const bounds = await button.boundingBox();
+          assert.ok(bounds.x >= headerBounds.x);
+          assert.ok(bounds.x + bounds.width <= headerBounds.x + headerBounds.width);
+        }
         if (process.env.MPS_BATCH_SCREENSHOTS)
           await page.screenshot({
             path: `${process.env.MPS_BATCH_SCREENSHOTS}/${width}-editing.png`,
           });
-        await frame.getByRole('button', { name: '取消', exact: true }).click();
+        await actions.getByRole('button', { name: '取消', exact: true }).click();
       }
       if (process.env.MPS_BATCH_SCREENSHOTS)
         await page.screenshot({
