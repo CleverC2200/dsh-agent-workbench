@@ -165,7 +165,15 @@ test('base warehouse snapshot uses authorized readiness markers and rejects inva
     `);
     const insert = db.prepare('INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?, ?)');
     const ready = (batch, warehouse, stockDate, variant = 'WAREHOUSE_BASE:__READY__') =>
-      insert.run(batch, '2026-11-27', stockDate, '202611', variant, 'inventory-daily-v5-20261103', warehouse);
+      insert.run(
+        batch,
+        '2026-11-27',
+        stockDate,
+        '202611',
+        variant,
+        'inventory-daily-v5-20261103',
+        warehouse,
+      );
     for (const warehouse of ['Y204', 'N436', 'A221']) ready('01', warehouse, '2026-11-26');
     ready('02', 'Y204', '2026-11-26', 'WAREHOUSE_BASE:BRANCH_WAREHOUSE_DIRECTORY');
     ready('03', 'Y204', null);
