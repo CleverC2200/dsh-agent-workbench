@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
+import * as XLSX from 'xlsx-republish';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
 
 const compiled = await build({
@@ -69,9 +71,11 @@ test('下市品报告及需求和产销存下载保留人工有效修正、日�
   assert.equal(retired.预计发货量, 0);
   await page.evaluate(() => window.showReport());
   await page.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
+  const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出产销存结果', exact: true }).click();
-  const planned = await page.evaluate(() => window.downloads.at(-1));
-  const manual = planned.rows.find((row) => row.产品编码 === '0');
+  const workbook = XLSX.read(await readFile(await (await download).path()), { type: 'buffer' });
+  const planned = XLSX.utils.sheet_to_json(workbook.Sheets['产销存结果']);
+  const manual = planned.find((row) => row.产品编码 === '0');
   assert.equal(manual.需求数量, 120);
   assert.equal(manual.下市品处理, '有效人工正需求继续计算');
   assert.ok(manual.内部实际排产量 > 0);

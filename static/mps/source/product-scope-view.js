@@ -1,3 +1,4 @@
+import { renderTablePagination } from './report-page.js';
 import { matchesCategories } from './category-filter.js';
 
 const columns = [
@@ -29,7 +30,7 @@ const exportColumns = [
 
 export function createProductScopeReport(react, { table, downloadCsv }) {
   const h = react.createElement;
-  return function ProductScopeReport({ result, selectedCategories = [] }) {
+  return function ProductScopeReport({ result, productReadFailed, selectedCategories = [] }) {
     const [base, setBase] = react.useState('');
     const [search, setSearch] = react.useState('');
     const [onlyIssues, setOnlyIssues] = react.useState(false);
@@ -76,93 +77,78 @@ export function createProductScopeReport(react, { table, downloadCsv }) {
       { className: 'dc-card', 'aria-label': '产品范围对账' },
       h(
         'div',
-        { className: 'dc-card-head' },
+        { className: 'dc-card-head mps-report-heading mps-table-heading' },
         h('h3', null, '产品范围对账'),
+        h(
+          'div',
+          { className: 'dc-toolbar dc-report-filters dc-product-scope-filters' },
+          h(
+            'label',
+            null,
+            '对账基地',
+            h(
+              'select',
+              {
+                'aria-label': '对账基地',
+                value: base,
+                onChange: (event) => change(setBase, event.target.value),
+              },
+              h('option', { value: '' }, '全部实际基地'),
+              [...new Set(scope.rows.map((row) => row.base).filter(Boolean))].map((value) =>
+                h('option', { key: value, value }, value),
+              ),
+            ),
+          ),
+          h('input', {
+            type: 'search',
+            'aria-label': '搜索对账基地或SKU',
+            placeholder: '搜索基地、SKU或物料组',
+            value: search,
+            onChange: (event) => change(setSearch, event.target.value),
+          }),
+          h(
+            'label',
+            null,
+            h('input', {
+              type: 'checkbox',
+              checked: onlyIssues,
+              onChange: (event) => change(setOnlyIssues, event.target.checked),
+            }),
+            '仅看范围或主数据问题',
+          ),
+          scope.productMonth &&
+            scope.productMonth !== scope.productTargetMonth &&
+            h(
+              'span',
+              null,
+              `产品清单采用 ${scope.productMonth}（目标 ${scope.productTargetMonth}）`,
+            ),
+        ),
         h(
           'button',
           {
+            className: 'mps-download',
             disabled: !rows.length,
             onClick: () => downloadCsv(`${scope.month}-产品范围对账.csv`, exportColumns, rows),
           },
           '下载产品范围对账CSV',
         ),
       ),
-      h(
-        'p',
-        { className: 'dc-card-note' },
-        `评估月${scope.month}，目标产品统计期${scope.productTargetMonth}，实际采用${scope.productMonth ?? '无可用产品清单'}，源统计期${scope.periods.join('、') || '未提供'}。源清单${scope.sourceRows}条，有效基地SKU ${scope.expectedCount}项，实际参与${scope.participatingCount}项。已覆盖${scope.coveredCount}项，主动排除${scope.excludedCount}项，遗漏${scope.missingCount}项，额外组合${scope.extraCount}项，冲突${scope.conflictCount}项，主数据缺项${scope.invalidCount}项。`,
-      ),
-      h(
-        'p',
-        { className: 'dc-card-note' },
-        `实际参与范围：${scope.bases.join('、') || '无有效基地'}。${scope.coverageIssues.join('；')}。范围对账不替代全国完整性证明；已参与的组合仍可能有需求或主数据缺项。`,
-      ),
-      h(
-        'div',
-        { className: 'dc-toolbar' },
-        h(
-          'label',
-          null,
-          '对账基地',
-          h(
-            'select',
-            {
-              'aria-label': '对账基地',
-              value: base,
-              onChange: (event) => change(setBase, event.target.value),
-            },
-            h('option', { value: '' }, '全部实际基地'),
-            [...new Set(scope.rows.map((row) => row.base).filter(Boolean))].map((value) =>
-              h('option', { key: value, value }, value),
-            ),
-          ),
-        ),
-        h('input', {
-          'aria-label': '搜索对账基地或SKU',
-          placeholder: '搜索基地、SKU或物料组',
-          value: search,
-          onChange: (event) => change(setSearch, event.target.value),
-        }),
-        h(
-          'label',
-          null,
-          h('input', {
-            type: 'checkbox',
-            checked: onlyIssues,
-            onChange: (event) => change(setOnlyIssues, event.target.checked),
-          }),
-          '仅看范围或主数据问题',
-        ),
-      ),
-      h(
-        'p',
-        { className: 'dc-card-note', role: 'status' },
-        `当前筛选${rows.length}项，页面与CSV使用相同筛选`,
-      ),
+
+      productReadFailed && h('p', { role: 'alert' }, '产品清单读取失败'),
       react.cloneElement(table(columns, rows.slice(pageIndex * 25, (pageIndex + 1) * 25)), {
         tabIndex: 0,
         role: 'region',
         'aria-label': '产品范围对账明细，可横向滚动',
       }),
       rows.length > 25 &&
-        h(
-          'div',
-          { className: 'dc-toolbar' },
-          h(
-            'button',
-            { disabled: pageIndex === 0, onClick: () => setPage(pageIndex - 1) },
-            '上一页产品范围',
-          ),
-          h('span', null, `第${pageIndex + 1}页，共${rows.length}项`),
-          h(
-            'button',
-            {
-              disabled: (pageIndex + 1) * 25 >= rows.length,
-              onClick: () => setPage(pageIndex + 1),
-            },
-            '下一页产品范围',
-          ),
-        ),
+        renderTablePagination(h, {
+          label: '产品范围对账',
+          page: pageIndex,
+          total: rows.length,
+          onPageChange: setPage,
+          buttonLabels: ['上一页产品范围', '下一页产品范围'],
+        }),
     );
   };
 }

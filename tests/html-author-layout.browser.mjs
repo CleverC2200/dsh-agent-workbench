@@ -56,10 +56,9 @@ for (const name of ['category', 'mps'])
           await expect(frame.locator('.scope-picker .arco-select')).toBeVisible();
         } else {
           await frame.getByRole('button', { name: '页面说明', exact: true }).click();
-          const dialog = frame.getByRole('dialog', { name: '页面说明', exact: true });
-          await expect(dialog).toBeVisible();
-          const modal = await dialog.boundingBox();
-          assert.ok(modal.width <= width - 20);
+          const help = frame.getByRole('region', { name: '页面说明', exact: true });
+          await expect(help).toBeVisible();
+          assert.ok((await help.boundingBox()).width <= width - 20);
         }
         await expect(
           frame.getByRole('button', { name: '转入当前对话草稿', exact: true }),
@@ -96,8 +95,6 @@ for (const name of ['category', 'mps'])
       await expect
         .poll(() => frame.locator('body').evaluate(() => window.dshPageInteraction?.available()))
         .toBe(true);
-      if (name === 'mps' && !(await frame.getByRole('dialog').count()))
-        await frame.getByRole('button', { name: '页面说明', exact: true }).click();
       await frame.getByRole('button', { name: '转入当前对话草稿', exact: true }).click();
       await expect(frame.locator('.author-quote-status')).toContainText('单次引用长度上限');
       assert.equal(
@@ -114,8 +111,6 @@ for (const name of ['category', 'mps'])
       await page.evaluate(() => {
         window.conflict = true;
       });
-      if (name === 'mps' && !(await frame.getByRole('dialog').count()))
-        await frame.getByRole('button', { name: '页面说明', exact: true }).click();
       await frame.getByRole('button', { name: '转入当前对话草稿', exact: true }).click();
       await expect(frame.locator('.author-quote-status')).toContainText('草稿已变化');
       assert.equal(await page.evaluate(() => window.peerDraft), draftBeforeRejected);
@@ -123,8 +118,6 @@ for (const name of ['category', 'mps'])
       await page.evaluate(() => {
         window.conflict = false;
       });
-      if (name === 'mps' && !(await frame.getByRole('dialog').count()))
-        await frame.getByRole('button', { name: '页面说明', exact: true }).click();
       await frame.getByRole('button', { name: '转入当前对话草稿', exact: true }).click();
       await expect(
         frame.getByRole('button', { name: '转入当前对话草稿', exact: true }),
@@ -138,13 +131,14 @@ for (const name of ['category', 'mps'])
       );
       assert.equal(await page.evaluate(() => window.persisted), 2);
       const questions = frame.locator('.author-questions details');
-      if (!(await questions.evaluate((element) => element.open)))
-        await questions.locator('summary').click();
-      await frame.locator('.author-question-list button').first().click();
-      if (name === 'category')
+      if (name === 'category') {
+        if (!(await questions.evaluate((element) => element.open)))
+          await questions.locator('summary').click();
+        await frame.locator('.author-question-list button').first().click();
         await expect.poll(() => page.evaluate(() => window.persisted)).toBe(3);
-      else {
-        await expect(frame.locator('.author-quote-status')).toContainText('页面能力尚未连接');
+      } else {
+        await expect(questions).toHaveCount(0);
+        await expect(frame.locator('.author-quote-status')).toContainText('已转入当前对话草稿');
         assert.equal(await page.evaluate(() => window.persisted), 2);
       }
       assert.match(await page.evaluate(() => window.peerDraft), /^历史草稿，请保留。/);

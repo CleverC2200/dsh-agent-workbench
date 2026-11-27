@@ -136,7 +136,7 @@
 .table {
   border-collapse: collapse;
   min-width: 100%;
-  font-size: 13px;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .table th,
 .table td {
@@ -149,6 +149,8 @@
   top: 0;
   text-align: left;
   background: var(--dsw-alias-interactive-bg-hover);
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 .table tbody tr:hover {
   background: var(--dsw-alias-interactive-bg-hover);
@@ -224,7 +226,7 @@
   font-weight: 800;
 }
 .table {
-  font-size: 10px;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .table th,
 .table td {
@@ -233,14 +235,16 @@
 }
 .table th {
   height: 38px;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
   line-height: 1.35;
   background: var(--ui-soft);
 }
 .table td {
   height: 44px;
   color: var(--ui-secondary);
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 .table tbody tr:hover {
   background: var(--ui-hover);
@@ -253,6 +257,7 @@
 
 .table {
   background: var(--ui-surface);
+  font-size: var(--workbench-list-font-size, 12px);
 }
 .table th > button,
 .table td > button[aria-expanded] {
@@ -288,4 +293,8 @@
   background: rgb(255 255 255 / 72%);
   color: #858c96;
   font-size: 11px;
+}
+.tabs[role='tablist'] button {
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }

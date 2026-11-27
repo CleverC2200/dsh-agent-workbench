@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as XLSX from 'xlsx-republish';
 
-export async function mpsDownloadText(path) {
+export async function mpsDownloadText(path, sheetName) {
   const data = await readFile(path);
   if (data[0] !== 0x50 || data[1] !== 0x4b) return data.toString('utf8');
   const zip = XLSX.CFB.read(data, { type: 'buffer' });
@@ -10,5 +10,7 @@ export async function mpsDownloadText(path) {
     assert.match(new TextDecoder().decode(XLSX.CFB.find(zip, path).content), /state="frozen"/);
   }
   const book = XLSX.read(data, { type: 'buffer' });
-  return XLSX.utils.sheet_to_csv(book.Sheets[book.SheetNames[0]]);
+  const sheet = book.Sheets[sheetName ?? book.SheetNames[0]];
+  assert.ok(sheet, `下载工作簿缺少 ${sheetName} 工作表`);
+  return XLSX.utils.sheet_to_csv(sheet);
 }

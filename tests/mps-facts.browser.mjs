@@ -208,7 +208,8 @@ test('confirmed monthly versions and shipment measures populate independently wh
   const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
   await expect(report.getByText('业务来源', { exact: true })).toBeVisible();
   await expect(history).toContainText('发货数量：7件；含赠品数量：9件；不含税收入：未提供');
-  await report.getByText('口径与统计说明', { exact: true }).click();
+  await expect(history.locator('.dc-source-body')).not.toContainText('来源含不可用值');
+  await report.getByRole('button', { name: '口径说明', exact: true }).click();
   await expect(report).toContainText('数量合计10件');
   await report.getByLabel('提报口径').selectOption('adjust');
   await expect(report).toContainText('数量合计20件');
@@ -225,7 +226,9 @@ test('confirmed monthly versions and shipment measures populate independently wh
   assert.match(previewCsv, /,7,9,/);
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
   const downloaded = page.waitForEvent('download');
-  await history.getByRole('button', { name: '导出当前明细' }).click();
+  await history
+    .getByRole('button', { name: /^下载(计划提报数据|模型双期预测|历史同期发货)$/ })
+    .click();
   const csv = await mpsDownloadText(await (await downloaded).path());
   assert.match(csv, /数量,含赠品数量,不含税收入/);
   assert.match(csv, /,7,9,/);
@@ -242,7 +245,6 @@ test('confirmed monthly versions and shipment measures populate independently wh
       .getByRole('region', { name: '模型双期预测' })
       .getByRole('button', { name: '同步', exact: true }),
   ).toBeEnabled();
-  assert(calls.some((call) => call.queryId === 'inventory-targets.count'));
   assert(
     calls
       .filter((call) => /stock|inventory/.test(call.queryId))
@@ -250,6 +252,10 @@ test('confirmed monthly versions and shipment measures populate independently wh
         ['inventory-targets.detail', 'inventory-targets.count'].includes(call.queryId),
       ),
   );
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  await expect
+    .poll(() => calls.some((call) => call.queryId === 'inventory-targets.count'))
+    .toBe(true);
 });
 test('full fact paging keeps zero and missing base distinct, without a failed shipment blocking plans', async (t) => {
   const records = Array.from({ length: 201 }, (_, index) => ({
@@ -269,7 +275,7 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   });
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(report.getByText('业务来源', { exact: true })).toBeVisible();
-  await report.getByText('口径与统计说明', { exact: true }).click();
+  await report.getByRole('button', { name: '口径说明', exact: true }).click();
   await expect(report).toContainText('当前期间200条，数量合计0件，缺失数量0条');
   await expect(
     frame.getByRole('region', { name: '历史同期发货' }).getByRole('alert'),
@@ -314,7 +320,7 @@ test('历史实绩大页碰到返回上限时缩小该页，从原偏移继续�
     { time: '2026-11-15T12:00:00+08:00' },
   );
   const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
-  await history.getByLabel('历史同期').selectOption('3');
+  await history.getByLabel('历史同期', { exact: true }).selectOption('3');
   await expect(history).toContainText('发货数量：750件');
   await expect(history).toContainText('当前期间740条');
   assert.deepEqual(pages, [
@@ -335,6 +341,7 @@ test('refreshing facts keeps an uploaded annual plan marked as a local file', as
     mimeType: 'text/csv',
     buffer: Buffer.from('月份,大类,数量\n2026-10,汤圆,123'),
   });
+  await annual.getByText('年度销售计划（分月）', { exact: true }).click();
   await expect(annual.getByText('本地文件', { exact: true })).toBeVisible();
   const currentReads = () =>
     calls.filter(
@@ -345,7 +352,7 @@ test('refreshing facts keeps an uploaded annual plan marked as a local file', as
   await expect.poll(currentReads).toBe(before + 1);
   await expect(report.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
   await expect(annual.getByText('本地文件', { exact: true })).toBeVisible();
-  await expect(annual.getByText('业务数据 · 源数量', { exact: true })).toHaveCount(0);
+  await expect(annual.getByLabel('年度需求基地')).toHaveCount(0);
 });
 test('truncated facts are rejected and a late historical period cannot overwrite the selected year', async (t) => {
   let release;
@@ -368,10 +375,10 @@ test('truncated facts are rejected and a late historical period cannot overwrite
   ).toContainText('分页与计数不一致');
   const history = frame.getByRole('region', { name: '历史同期发货' });
   await expect.poll(() => historyCalls).toBeGreaterThanOrEqual(1);
-  await history.getByLabel('历史同期').selectOption('2');
+  await history.getByLabel('历史同期', { exact: true }).selectOption('2');
   await expect(history.getByText('业务来源', { exact: true })).toBeVisible();
   release();
-  await expect(history.getByLabel('历史同期')).toHaveValue('2');
+  await expect(history.getByLabel('历史同期', { exact: true })).toHaveValue('2');
   await expect(history).toContainText('发货数量：7件');
   await history.getByRole('button', { name: '预览当前明细' }).click();
   await expect(frame.getByRole('dialog')).toContainText(String(new Date().getFullYear() - 2));
@@ -447,11 +454,13 @@ test('source previews omit missing-count columns while downloads preserve decima
     await expect(dialog).not.toContainText('公式');
     await expect(dialog).not.toContainText('代入');
     await dialog.getByRole('button', { name: '关闭弹窗' }).click();
-    await section.getByText('口径与统计说明', { exact: true }).click();
+    await section.getByRole('button', { name: '口径说明', exact: true }).click();
     await expect(section.getByRole('button', { name: '下载CSV模板' })).toHaveCount(0);
     await expect(section).not.toContainText('公式：');
     const download = page.waitForEvent('download');
-    await section.getByRole('button', { name: '导出当前明细' }).click();
+    await section
+      .getByRole('button', { name: /^下载(计划提报数据|模型双期预测|历史同期发货)$/ })
+      .click();
     const csv = await mpsDownloadText(await (await download).path());
     assert(csv.includes(title === '计划提报数据' ? '12.5' : '7.5,0,10.5'));
   }

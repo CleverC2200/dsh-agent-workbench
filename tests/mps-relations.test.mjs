@@ -70,12 +70,17 @@ test('relation result keeps every exact-code candidate and never matches by name
   assert.equal(result.sku[0].capacity.series, '源系列甲');
   assert.equal(result.sku[0].capacity.standard_daily_output_pc, 50);
   assert.equal(result.sku[0].capacity.standard_daily_output_ton, 0);
-  assert.deepEqual(result.sku[2].missing, ['缺产品编码', '缺产品系列', '缺产品分类', '无候选产线']);
+  assert.deepEqual(result.sku[2].missing, [
+    '缺产品编码',
+    '缺产品系列',
+    '缺产品分类',
+    '无候选隧道记录',
+  ]);
   assert.equal(result.sku[2].capacity, null);
   assert.equal(result.sku[3].product.material_code, '1');
   assert.equal(result.sku[3].capacity, null);
   assert.deepEqual(result.sku[4].missing, [
-    '缺产线物料编码',
+    '缺候选隧道物料编码',
     '无产品记录',
     '缺基地、车间或隧道号，未建立产能关系',
   ]);
@@ -226,9 +231,9 @@ test('source series and categories remain missing even when the exact product is
     '2026-10',
   );
   assert.deepEqual(result.sku[0].missing, [
-    '缺产线源系列',
+    '缺候选隧道源系列',
     '缺组合系列',
-    '缺产线生产品类',
+    '缺候选隧道生产品类',
     '缺基地、车间或隧道号，未建立产能关系',
   ]);
   assert.equal(result.sku[0].capacity.standard_daily_output_pc, 0);
@@ -292,7 +297,7 @@ test('求解只读取最新调拨快照，三个需求月共用并拒绝混合�
   await assert.rejects(readPlanRelations(config, execute, months), /配置.*变化|数据源.*版本/);
 });
 
-test('产线只按同基地同生产单位同隧道匹配，未匹配与多匹配保留候选原记录', () => {
+test('候选隧道按同基地同生产单位同隧道匹配，未匹配与多匹配保留候选原记录', () => {
   const tunnel = {
     belong_base: '甲',
     production_unit: '车间一',

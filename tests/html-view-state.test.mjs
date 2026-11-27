@@ -311,8 +311,18 @@ test('personal feedback fields persist in their Session and never accept returne
   );
 });
 
-test('MPS local input drafts recover only in their subject and Session with no credential or calculated facts', () => {
-  const owner = new WorkbenchController({ panel() {}, document() {} });
+test('MPS local drafts recover across Sessions and restart within the same account', () => {
+  const ports = { panel() {}, document() {} };
+  const memory = {
+    state: { version: 2, selections: [], views: [] },
+    getSnapshot() {
+      return this.state;
+    },
+    set(state) {
+      this.state = state;
+    },
+  };
+  const owner = new WorkbenchController(ports, memory);
   const page = 'plan-category-production';
   owner.registerFrame({ id: page, kind: 'html', src: '/mps' });
   const localDrafts = {
@@ -360,24 +370,79 @@ test('MPS local input drafts recover only in their subject and Session with no c
     ],
   };
   const state = { version: 1, localDrafts };
-  owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', state);
-  assert.deepEqual(owner.readHtmlViewState(page, 'tenant-A/user-A/session-A'), state);
-  assert.equal(owner.readHtmlViewState(page, 'tenant-B/user-A/session-A'), undefined);
-  assert.equal(owner.readHtmlViewState(page, 'tenant-A/user-A/session-B'), undefined);
+  const first = JSON.stringify(['production/tenant-A/user-A', 'session-A']);
+  const second = JSON.stringify(['production/tenant-A/user-A', 'session-B']);
+  const firstView = { ...state, tab: 'process', assistantDraft: '待发给对话 A' };
+  owner.saveHtmlViewState(page, first, firstView);
+  assert.deepEqual(owner.readHtmlViewState(page, first), firstView);
+  assert.deepEqual(owner.readHtmlViewState(page, second), state);
+  owner.saveHtmlViewState(page, second, { ...state, tab: 'ship' });
+  const restored = new WorkbenchController(ports, memory);
+  restored.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  assert.deepEqual(restored.readHtmlViewState(page, second), { ...state, tab: 'ship' });
+  assert.deepEqual(restored.readHtmlViewState(page, first), firstView);
+  for (const subject of [
+    'production/tenant-A/user-B',
+    'production/tenant-B/user-A',
+    'test/tenant-A/user-A',
+  ])
+    assert.equal(
+      restored.readHtmlViewState(page, JSON.stringify([subject, 'session-A'])),
+      undefined,
+    );
   for (const field of ['credentials', 'accessToken', 'business', 'calculation']) {
     const invalid = structuredClone(state);
     invalid.localDrafts.drafts[0][field] = {};
-    assert.throws(
-      () => owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', invalid),
-      /INVALID_HTML_VIEW_STATE/,
-    );
+    assert.throws(() => owner.saveHtmlViewState(page, first, invalid), /INVALID_HTML_VIEW_STATE/);
   }
   const incompatible = structuredClone(state);
   incompatible.localDrafts.format = 2;
   assert.throws(
-    () => owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', incompatible),
+    () => owner.saveHtmlViewState(page, first, incompatible),
     /INVALID_HTML_VIEW_STATE/,
   );
+
+  const otherDraft = { ...localDrafts.drafts[0], name: '另一份旧评估' };
+  memory.state = {
+    version: 2,
+    selections: [],
+    views: [
+      { page, scope: first, state: firstView },
+      {
+        page,
+        scope: second,
+        state: {
+          version: 1,
+          tab: 'ship',
+          localDrafts: { ...localDrafts, drafts: [otherDraft] },
+        },
+      },
+    ],
+  };
+  const migrated = new WorkbenchController(ports, memory);
+  migrated.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  const recovered = migrated.readHtmlViewState(page, first);
+  assert.equal(recovered.localDrafts.selected, 'local-2');
+  assert.equal(recovered.localDrafts.drafts[0].name, '十二月评估');
+  assert.equal(recovered.localDrafts.drafts[1].name, '另一份旧评估');
+  assert.notEqual(recovered.localDrafts.drafts[1].id, 'local-2');
+  migrated.saveHtmlViewState(page, first, recovered);
+  const restarted = new WorkbenchController(ports, memory);
+  const unregister = restarted.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  assert.deepEqual(restarted.readHtmlViewState(page, second), {
+    version: 1,
+    tab: 'ship',
+    localDrafts: recovered.localDrafts,
+  });
+  unregister();
+  restarted.dispose();
+  const coldStart = new WorkbenchController(ports, memory);
+  coldStart.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  assert.deepEqual(coldStart.readHtmlViewState(page, second), {
+    version: 1,
+    localDrafts: recovered.localDrafts,
+  });
+  assert.equal(memory.state.views.filter(({ state }) => state.localDrafts).length, 1);
 });
 
 test('MPS local shipment averages retain zero, missing and positive input through the codec and reject invalid values', () => {
@@ -508,6 +573,7 @@ test('MPS local and business shipment edits recover through the codec and Host w
     pull: 'monthly',
     files: {},
     shipment: {
+      forecasts: { '["2026-09","郑州","A"]': 0 },
       activeSource: 'business',
       values: business.values,
       remaining: business.remaining,
@@ -537,6 +603,7 @@ test('MPS local and business shipment edits recover through the codec and Host w
   );
   assert.deepEqual(recovered.drafts[0].shipment.sourceEdits, { 'local-file': local, business });
   assert.equal(recovered.drafts[0].shipment.business, undefined);
+  assert.deepEqual(recovered.drafts[0].shipment.forecasts, draft.shipment.forecasts);
   assert.equal(owner.readHtmlViewState(page, 'another-tenant/user/session'), undefined);
   const invalid = structuredClone(encoded);
   invalid.drafts[0].shipment.sourceEdits.business.credentials = 'CREDENTIAL';

@@ -44,7 +44,7 @@ export function encodeLocalDrafts(drafts, selected) {
       name: draft.name,
       month: draft.month,
       pull: draft.pull,
-      ...fields(draft, ['festivalBasis', 'productMonth', 'productPeriod']),
+      ...fields(draft, ['festivalBasis', 'productMonth', 'productPeriod', 'demandImports']),
       inputs: Object.fromEntries(
         sources.flatMap((source) => {
           const local =
@@ -98,6 +98,7 @@ export function encodeLocalDrafts(drafts, selected) {
                 'values',
                 'remaining',
                 'transferPlans',
+                'forecasts',
                 'editsByCutoff',
               ]),
               ...(draft.shipment.sourceEdits
@@ -160,48 +161,61 @@ export const matchesQuantityAdjustment = (row, entry) =>
   (entry.kind === 'base-sku' ? row.code === entry.code : !row.delisted);
 
 export function changeAdjustment(adjustments, kind, input, undo = false) {
+  return changeAdjustments(adjustments, kind, [{ input, undo }]);
+}
+
+export function changeAdjustments(adjustments, kind, changes) {
   const state = adjustments ?? emptyAdjustments();
-  if (
-    kind !== 'shares' &&
-    (kind !== 'quantities' || !['base-sku', 'category-total', 'group-total'].includes(input.kind))
-  )
-    throw Error('需求调整范围无效。');
   const keyOf = kind === 'quantities' ? quantityAdjustmentKey : (entry) => entry.rowId;
-  const key = keyOf(input);
-  const previous = (state[kind] ?? []).find((entry) => keyOf(entry) === key);
-  if (undo && !previous) return state;
-  const entry = undo
-    ? previous
-    : {
-        ...input,
-        reason: String(input.reason ?? '').trim(),
-        at: new Date().toISOString(),
-      };
-  const value = kind === 'shares' ? entry.share : entry.quantity;
-  if (
-    !undo &&
-    (!entry.reason || !Number.isFinite(value) || value < 0 || (kind === 'shares' && value > 1))
-  )
-    throw Error('调整值须为非负有限数，占比不得超过1，并填写调整原因。');
-  return {
-    ...state,
-    [kind]: [
-      ...(state[kind] ?? []).filter((entry) => keyOf(entry) !== key),
-      ...(undo ? [] : [entry]),
-    ],
-    history: [
-      ...state.history,
-      {
-        kind,
-        key,
-        action: undo ? 'undo' : 'set',
-        systemValue: entry.systemValue ?? null,
-        value: undo ? (input.effectiveValue ?? null) : value,
-        reason: entry.reason,
-        at: new Date().toISOString(),
-      },
-    ],
-  };
+  const values = new Map((state[kind] ?? []).map((entry) => [keyOf(entry), entry]));
+  const history = [];
+  const changedKeys = new Set();
+  for (const { input, undo = false } of changes) {
+    if (
+      kind !== 'shares' &&
+      (kind !== 'quantities' || !['base-sku', 'category-total', 'group-total'].includes(input.kind))
+    )
+      throw Error('需求调整范围无效。');
+    const key = keyOf(input);
+    const previous = values.get(key);
+    if (undo && !previous) continue;
+    const entry = undo
+      ? previous
+      : {
+          ...input,
+          reason: String(input.reason ?? '').trim(),
+          at: new Date().toISOString(),
+        };
+    const value = kind === 'shares' ? entry.share : entry.quantity;
+    if (
+      !undo &&
+      (!entry.reason || !Number.isFinite(value) || value < 0 || (kind === 'shares' && value > 1))
+    )
+      throw Error('调整值须为非负有限数，占比不得超过1，并填写调整原因。');
+    changedKeys.add(key);
+    values.delete(key);
+    if (!undo) values.set(key, entry);
+    history.push({
+      kind,
+      key,
+      action: undo ? 'undo' : 'set',
+      systemValue: entry.systemValue ?? null,
+      value: undo ? (input.effectiveValue ?? null) : value,
+      reason: entry.reason,
+      ...(entry.remark !== undefined ? { remark: entry.remark } : {}),
+      at: new Date().toISOString(),
+    });
+  }
+  return history.length
+    ? {
+        ...state,
+        [kind]: [
+          ...(state[kind] ?? []).filter((entry) => !changedKeys.has(keyOf(entry))),
+          ...[...values].filter(([key]) => changedKeys.has(key)).map(([, entry]) => entry),
+        ],
+        history: [...state.history, ...history],
+      }
+    : state;
 }
 
 export function archiveUpperAdjustments(adjustments) {

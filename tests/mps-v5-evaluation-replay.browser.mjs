@@ -72,6 +72,7 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
           material_name: `产品${code}`,
           series: '系列',
           product_item: code === 'STILL' ? '其他' : '包点',
+          month_order_qty: null,
           shipped: code === 'B' ? 1000 : 0,
           prepped: 0,
           unprepped: 0,
@@ -197,8 +198,8 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
   await workflowStep(frame, '本月预估发货');
   await frame.getByLabel('数据截止日', { exact: true }).fill('2026-11-23');
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
-  await expect(frame.getByRole('button', { name: '下载明细', exact: true })).toBeEnabled();
-  const shipment = await download(page, frame, '下载明细', '02-shipment');
+  await expect(frame.getByRole('button', { name: '下载发货与结存', exact: true })).toBeEnabled();
+  const shipment = await download(page, frame, '下载发货与结存', '02-shipment');
   assert.equal(shipment.rows.find((row) => row.产品编码 === 'A').整月预估发货, '0');
   assert.equal(shipment.rows.find((row) => row.产品编码 === 'B').整月预估发货, '1000');
   assert.doesNotMatch(shipment.text, /ODM|供给标签|华东|VIRTUAL/);
@@ -223,26 +224,27 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
   );
   assert.doesNotMatch(demand.text, /ODM|供给标签|华东|VIRTUAL|粽子/);
   const leaf = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  const actions = frame.locator('.dc-adjustment-actions');
   for (const code of codes) {
     await leaf.getByLabel('搜索当前步骤', { exact: true }).fill(code);
-    await leaf.getByRole('button', { name: '调整', exact: true }).click();
+    await actions.getByRole('button', { name: '调整', exact: true }).click();
     for (const month of [...months, '2027-03'])
       await leaf
         .getByLabel(`点心 ${code === 'STILL' ? '其他' : '包点'} ${code} 郑州 ${month} 需求数量`, {
           exact: true,
         })
         .fill(code === 'B' ? '30' : '0');
-    await selectAdjustmentReason(leaf, '固定回放确认量');
-    await leaf.getByRole('button', { name: '保存调整', exact: true }).click();
+    await selectAdjustmentReason(frame, '固定回放确认量');
+    await actions.getByRole('button', { name: '保存调整', exact: true }).click();
   }
   await leaf.getByLabel('搜索当前步骤', { exact: true }).fill('');
   await workflowStep(frame, '主数据对应关系');
   await expect(
-    frame.getByRole('region', { name: '单品与候选产线', exact: true }),
+    frame.getByRole('region', { name: '单品与候选隧道', exact: true }),
   ).not.toContainText('华东');
   await workflowStep(frame, '约束与配置');
   const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
-  await constraints.getByRole('button', { name: '调整', exact: true }).click();
+  await actions.getByRole('button', { name: '调整', exact: true }).click();
   for (const code of codes) {
     await constraints.getByLabel(`郑州 ${code} 补充目标周转天数`, { exact: true }).fill('0');
     for (const month of months) {
@@ -256,7 +258,7 @@ test('V5同一12月版本从同步产品到第7步，源明细、页面和实际
         .fill('确认无期间进出');
     }
   }
-  await constraints.getByRole('button', { name: '保存调整', exact: true }).click();
+  await actions.getByRole('button', { name: '保存调整', exact: true }).click();
   await workflowStep(frame, '产能评估与缺口');
   await frame.getByRole('button', { name: '执行评估', exact: true }).click();
   await expect(frame.getByRole('button', { name: '重新评估', exact: true })).toBeEnabled();

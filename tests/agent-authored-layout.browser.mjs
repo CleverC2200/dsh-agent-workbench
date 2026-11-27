@@ -611,7 +611,7 @@ test('APS top month selector applies the original period and keeps its menu with
     }),
   }));
   assert.equal(grid.columns, 4);
-  assert.ok(grid.children.every((cell) => cell.width <= 60 && cell.height <= 32));
+  assert.ok(grid.children.every((cell) => cell.width <= 60 && cell.height === 34));
   const before = calls.length;
   await menu
     .locator('.date-picker-month')
@@ -1923,7 +1923,7 @@ test('FC overview fits five compact cards in a wide row and adapts without clipp
     );
     assert.ok(
       layout.cards.every((card) => card.height <= 145),
-      `FC cards too tall at ${width}`,
+      `FC cards too tall at ${width}: ${layout.cards.map((card) => card.height).join(', ')}`,
     );
     if (columns === 5)
       assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
@@ -2726,7 +2726,14 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
           initial_deviation: 50,
           adjusted_plan: 100,
           adjusted_deviation: 10,
+          shipped_qty: 80,
+          submitted_plan_qty: 100,
+          missing_ship_plan: 0,
         });
+      if (queryId === 'lantern.open-orders')
+        Object.assign(result.rows[0], { open_qty: 12000, shortage_qty: 2000, invalid: 0 });
+      if (queryId === 'lantern.planning')
+        Object.assign(result.rows[0], { inbound_qty: 90, adjusted_plan_qty: 100, invalid: 0 });
       if (queryId === 'lantern.production')
         Object.assign(result.rows[0], {
           planned: 200,
@@ -2779,10 +2786,23 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   await lantern.click();
   await expect(lantern).toHaveAttribute('aria-current', 'page');
   await expect(dashboard.getByText('数据范围 2026-10-01 至 2026-10-19')).toBeVisible();
-  await expect(dashboard.locator('[data-metric="销售提报准确率"]')).toContainText('82.50');
+  await expect(dashboard.locator('[data-metric="销售提报准确率"]')).toHaveCount(0);
+  await expect(dashboard.locator('[data-metric="作废率"]')).toHaveCount(0);
+  await expect(dashboard.getByRole('tab', { name: '作废率', exact: true })).toHaveCount(0);
+  assert.equal(
+    calls.some(({ queryId }) => queryId.includes('cancellation')),
+    false,
+  );
   await dashboard.getByRole('tab', { name: '销售预算达成率', exact: true }).click();
-  const budgetRow = dashboard.getByRole('row', { name: /汤圆合计/ });
+  const budgetRow = dashboard.getByRole('row', { name: /汤圆/ }).first();
   await expect(budgetRow).toContainText('80.00%');
+  await expect(dashboard.locator('[data-metric="销售提报达成率"]')).toContainText('80.00');
+  await expect(dashboard.locator('[data-metric="未开订单量"]')).toContainText('1.20');
+  await expect(dashboard.locator('[data-metric="未开订单缺货量"]')).toContainText('0.20');
+  assert.equal(
+    calls.some(({ queryId }) => queryId === 'lantern.ontime'),
+    false,
+  );
   await sales.press('ArrowRight');
   await expect(production).toBeFocused();
   await expect(sales).toHaveAttribute('aria-selected', 'true');
@@ -2793,11 +2813,13 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   await production.press('Enter');
   await expect(production).toHaveAttribute('aria-selected', 'true');
   await expect(dashboard.locator('[data-metric="生产计划达成率"]')).toContainText('90.00');
+  await expect(dashboard.locator('[data-metric="生产规划达成率"]')).toContainText('90.00');
   assert.equal(
     calls.find(({ queryId }) => queryId === 'lantern.production').parameters.end_exclusive,
     '20261020',
   );
-  await expect(dashboard.getByRole('row', { name: /饺子/ })).toContainText('25.00%');
+  await expect(dashboard.getByRole('row', { name: /饺子/ })).toHaveCount(0);
+  await expect(dashboard.getByRole('row', { name: /汤圆/ }).first()).toContainText('90.00%');
   await dashboard.getByRole('tab', { name: '基地维度', exact: true }).click();
   await expect(dashboard.getByRole('row', { name: /华东/ })).toContainText('90.00%');
   await dashboard.getByRole('tab', { name: '品类维度', exact: true }).click();
@@ -2826,7 +2848,7 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
     'lantern.budget',
     'lantern.accuracy',
     'lantern.amendment',
-    'lantern.ontime',
+    'lantern.open-orders',
   ]) {
     assert.equal(
       calls.find((call) => call.queryId === queryId).parameters.product_category,
@@ -2850,7 +2872,8 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   const meter = dashboard.locator('[data-metric="生产计划达成率"]');
   await meter.getByRole('button').click();
   const trend = dashboard.getByRole('region', { name: '生产计划达成率趋势', exact: true });
-  await expect(trend).toContainText('上月同期');
+  await expect(trend.getByRole('columnheader', { name: '2026-09' })).toBeVisible();
+  await expect(meter).toContainText('上月同期');
   await expect(meter).toContainText('+5.00pp');
   await trend.getByRole('button', { name: '关闭趋势' }).click();
   await dashboard.getByRole('tab', { name: '日度视角', exact: true }).click();
@@ -2877,87 +2900,242 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   assert.deepEqual(errors, []);
 });
 
-test('APS 汤圆订制作废率临时失败后恢复卡片与清单，字段未发布时停止重试', async (t) => {
-  let attempts = 0;
-  let published = true;
-  const { frame, errors } = await mount(t, 'apsplan', 1280, ({ queryId, parameters }, result) => {
-    if (queryId !== 'lantern.cancellation' || parameters.start !== '2026-10-01') return result;
-    attempts++;
-    if (!published)
-      return { failure: { reasonCode: 'FIELD_NOT_PUBLISHED', message: '字段未发布' } };
-    if (attempts === 1) throw Error('GEA SQL 查询超时');
-    Object.assign(result.rows[0], {
-      region: '华东经销大区',
-      province: '上海',
-      kind: '1',
-      numerator: 42,
-      denominator: 1000,
-      sample_numerator: 42,
-      sample_denominator: 1000,
-      invalid: 0,
-    });
-    return result;
-  });
+test('APS 汤圆趋势按当前时间粒度读取，分指标向前补齐历史', async (t) => {
+  const { frame, calls, errors } = await mount(
+    t,
+    'apsplan',
+    768,
+    ({ queryId, parameters }, result) => {
+      if (queryId !== 'lantern.production') return result;
+      if (parameters.start === '20260901' && parameters.end_exclusive === '20261001') {
+        result.rows = [];
+        return result;
+      }
+      Object.assign(result.rows[0], {
+        planned: 200,
+        actual: 180,
+        known_planned: 200,
+        known_actual: 180,
+        records: 1,
+        valid_records: 1,
+        invalid: 0,
+        source_basis: 'MES_QUANTITY',
+      });
+      return result;
+    },
+  );
   await frame.getByRole('button', { name: '汤圆订制看板', exact: true }).click();
   const dashboard = frame.locator('.lantern-dashboard');
-  const card = dashboard.locator('[data-metric="作废率"]');
-  await expect(card).toContainText('4.20');
-  await dashboard.getByRole('tab', { name: '作废率', exact: true }).click();
-  const row = dashboard.getByRole('row', { name: /华东经销大区/ }).first();
-  await expect(row).toContainText('4.20%');
-  assert.equal(attempts, 2);
-
-  published = false;
-  await dashboard.getByRole('button', { name: '刷新', exact: true }).click();
-  await expect(card).toContainText('查询失败');
-  await expect(card).toContainText('当前账号或指标来源未开放所需数据');
-  assert.equal(attempts, 3);
+  await dashboard.getByRole('tab', { name: '生产供应链', exact: true }).click();
+  const card = dashboard.getByRole('button', { name: '生产计划达成率趋势', exact: true });
+  const trend = dashboard.getByRole('region', { name: '生产计划达成率趋势', exact: true });
+  const labels = trend.getByRole('columnheader');
+  const values = trend.getByRole('cell');
+  const load = trend.getByRole('button', { name: '加载更早数据', exact: true });
+  const currentReads = () => calls.filter(({ queryId }) => queryId === 'lantern.production');
+  const hasRead = (start, end, category) =>
+    currentReads().some(
+      ({ parameters }) =>
+        parameters.start === start &&
+        parameters.end_exclusive === end &&
+        parameters.product_category === category,
+    );
+  const expectations = [
+    ['月度视角', '2026-05', '2026-10', '20260501', '20260601', 6],
+    ['年度视角', '2024年', '2026年', '20240101', '20250101', 3],
+    ['周度视角', '2026-09-14 至 2026-09-20', '2026-10-19', '20260928', '20261005', 6],
+    ['日度视角', '2026-10-14', '2026-10-19', '20261014', '20261015', 6],
+  ];
+  for (const [name, first, last, start, end, count] of expectations) {
+    await dashboard.getByRole('tab', { name, exact: true }).click();
+    assert.equal(hasRead(start, end, '汤圆'), false);
+    await card.press('Enter');
+    await expect(load).toBeEnabled();
+    await expect(labels).toHaveCount(count);
+    await expect(labels.first()).toHaveText(first);
+    await expect(labels.last()).toHaveText(last);
+    assert.equal(hasRead(start, end, '汤圆'), true);
+    if (name === '月度视角') {
+      await expect(values.nth(4)).toHaveText('—');
+      assert.equal((await trend.locator('polyline').getAttribute('points')).split(' ').length, 4);
+      assert.equal(hasRead('20260401', '20260501', '汤圆'), false);
+      await load.press('Enter');
+      await expect(load).toBeFocused();
+      await expect(load).toBeEnabled();
+      await expect(labels).toHaveCount(12);
+      await expect(labels.first()).toHaveText('2025-11');
+      await expect(labels.last()).toHaveText('2026-10');
+      assert.equal(hasRead('20260401', '20260501', '汤圆'), true);
+    }
+    await trend.getByRole('button', { name: '关闭趋势' }).click();
+    await expect(card).toBeFocused();
+  }
+  await dashboard.getByRole('tab', { name: '月度视角', exact: true }).click();
+  await dashboard.getByRole('tab', { name: '生产计划达成率', exact: true }).click();
+  await expect(
+    dashboard.getByRole('button', { name: '查看生产计划达成率趋势', exact: true }),
+  ).toHaveCount(0);
+  await card.press('Enter');
+  await expect(load).toBeEnabled();
+  await expect(labels).toHaveCount(6);
+  await expect(values.last()).toHaveText('90.00%');
+  await expect(trend.locator('.lantern-trend-goal')).toHaveText('目标 > 99%');
+  await expect(trend.locator('.lantern-trend-missing')).toHaveText('暂无数据');
+  assert.equal(hasRead('20260501', '20260601', '汤圆'), true);
+  await load.click();
+  await expect(load).toBeEnabled();
+  await expect(labels).toHaveCount(12);
+  assert.equal(hasRead('20260401', '20260501', '汤圆'), true);
+  await dashboard.getByRole('button', { name: '统计日期 2026年10月', exact: true }).click();
+  const august = dashboard.getByRole('button', { name: '8月', exact: true });
+  await august.click();
+  await august.press('Escape');
+  await expect(load).toBeEnabled();
+  await expect(labels).toHaveCount(6);
+  await expect(labels.first()).toHaveText('2026-03');
+  await expect(labels.last()).toHaveText('2026-08');
+  await load.press('Escape');
+  await expect(card).toBeFocused();
   assert.deepEqual(errors, []);
 });
 
-test('APS 汤圆品类作废率先显示当期全品类，随后读取同期', async (t) => {
-  const current = Promise.withResolvers();
-  const previous = Promise.withResolvers();
-  const { frame, calls, errors } = await mount(t, 'apsplan', 1280, async (query, result) => {
-    if (query.queryId !== 'lantern.product-cancellation') return result;
-    await (query.parameters.start === '2026-10-01' ? current.promise : previous.promise);
-    const numbers = {
-      numerator: 3,
-      denominator: 100,
-      sample_numerator: 3,
-      sample_denominator: 100,
-      invalid: 0,
-      sku: null,
-      material: null,
-      item: null,
-    };
-    result.rows = [
-      { ...result.rows[0], ...numbers, category: '汤圆' },
-      { ...result.rows[0], ...numbers, category: '饺子', numerator: 7, sample_numerator: 7 },
-    ];
+test('APS 汤圆销售预算和提报在同一份清单显示组织和商品数据', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'apsplan', 1280, ({ queryId }, result) => {
+    if (queryId === 'lantern.budget' || queryId === 'lantern.province-budget')
+      Object.assign(result.rows[0], {
+        month: '202610',
+        actual: 80000,
+        budget: 100000,
+        province: '上海',
+      });
+    if (queryId === 'lantern.accuracy')
+      Object.assign(result.rows[0], {
+        month: '2026-10-01',
+        region: '华东经销大区',
+        province: '上海',
+        shipped_qty: 90,
+        submitted_plan_qty: 100,
+        missing_ship_plan: 0,
+      });
     return result;
-  });
-  t.after(() => {
-    current.resolve();
-    previous.resolve();
   });
   await frame.getByRole('button', { name: '汤圆订制看板', exact: true }).click();
   const dashboard = frame.locator('.lantern-dashboard');
-  await dashboard.getByRole('tab', { name: '作废率', exact: true }).click();
-  await dashboard.getByRole('tab', { name: '品类维度', exact: true }).click();
-  const productReads = () =>
-    calls.filter(({ queryId }) => queryId === 'lantern.product-cancellation');
-  await expect.poll(() => productReads().length).toBe(1);
-  assert.equal(productReads()[0].parameters.start, '2026-10-01');
-  assert.equal(productReads()[0].parameters.product_category, null);
-  await expect(dashboard.getByText('正在读取商品指标…')).toBeVisible();
-  assert.equal(productReads().length, 1);
-  current.resolve();
-  await expect(dashboard.getByRole('row', { name: /饺子/ })).toContainText('7.00%');
-  await expect.poll(() => productReads().length).toBe(2);
-  assert.notEqual(productReads()[1].parameters.start, '2026-10-01');
-  assert.equal(productReads()[1].parameters.product_category, null);
-  previous.resolve();
+  for (const [title, value] of [
+    ['销售预算达成率', '80.00%'],
+    ['销售提报达成率', '90.00%'],
+  ]) {
+    await dashboard.getByRole('tab', { name: title, exact: true }).click();
+    await expect(dashboard.getByRole('tablist', { name: '清单维度' })).toHaveCount(0);
+    const organization = dashboard.getByRole('table', { name: '销售组织明细' });
+    await organization
+      .locator('tbody tr')
+      .first()
+      .getByRole('button', { name: /^展开/ })
+      .click();
+    await expect(organization.getByRole('row', { name: /上海/ })).toContainText(value);
+    await expect(dashboard.getByRole('table', { name: `${title}商品明细` })).toContainText(value);
+  }
+  assert.ok(calls.some(({ queryId }) => queryId === 'lantern.province-budget'));
+  assert.deepEqual(errors, []);
+});
+
+test('APS 汤圆生产供应链骨架加载后按层展开，同屏保留父行', async (t) => {
+  const initial = Promise.withResolvers();
+  const detail = Promise.withResolvers();
+  t.after(() => {
+    initial.resolve();
+    detail.resolve();
+  });
+  const { frame, calls, page, errors } = await mount(t, 'apsplan', 1280, async (query, result) => {
+    if (query.queryId === 'lantern.production') {
+      await (query.parameters.sku_detail ? detail.promise : initial.promise);
+      Object.assign(result.rows[0], {
+        planned: 100,
+        actual: 90,
+        known_planned: 100,
+        known_actual: 90,
+        records: 1,
+        valid_records: 1,
+        invalid: 0,
+        source_basis: 'MES_QUANTITY',
+      });
+    }
+    if (query.queryId === 'lantern.product-directory')
+      Object.assign(result.rows[0], {
+        sku: 'sku-A-000',
+        category: '汤圆',
+        product_class: '基础',
+        item: '系列甲',
+        material: '物料组甲',
+      });
+    if (query.queryId === 'lantern.fulfillment' && query.parameters.sku_detail)
+      Object.assign(result.rows[0], {
+        sku: 'sku-A-000',
+        category: '汤圆',
+        demand: 100,
+        shortage: 12,
+      });
+    return result;
+  });
+  await frame.getByRole('button', { name: '汤圆订制看板', exact: true }).click();
+  const dashboard = frame.locator('.lantern-dashboard');
+  await dashboard.getByRole('tab', { name: '生产供应链', exact: true }).click();
+  await expect(dashboard.getByRole('status', { name: '工作台加载中' })).toBeVisible();
+  const list = dashboard.getByRole('table', { name: '指标总览商品明细' });
+  await expect(list.getByRole('status', { name: '商品明细加载中' })).toBeVisible();
+  await expect(list.getByText('暂无', { exact: false })).toHaveCount(0);
+  initial.resolve();
+
+  const cards = dashboard.locator('[data-module="production"] .lantern-metric');
+  await expect(cards).toHaveCount(3);
+  const tops = await cards.evaluateAll((items) =>
+    items.map((item) => Math.round(item.getBoundingClientRect().top)),
+  );
+  assert.equal(new Set(tops).size, 1);
+  await expect(dashboard.getByRole('region', { name: '汤圆指标分析' })).toContainText('AI 洞察');
+  await expect(dashboard.getByRole('button', { name: /^品类/ })).toHaveCount(0);
+  await expect(dashboard.getByRole('search', { name: '商品筛选' })).toContainText('汤圆');
+
+  await list.getByRole('button', { name: '展开汤圆', exact: true }).click();
+  await expect(list.getByRole('status', { name: '商品明细加载中' })).toBeVisible();
+  await expect(list.getByRole('button', { name: '折叠汤圆', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  detail.resolve();
+  for (const parent of ['基础', '系列甲', '物料组甲']) {
+    await list.getByRole('button', { name: `展开${parent}`, exact: true }).press('Enter');
+    await expect(list.getByRole('button', { name: `折叠${parent}`, exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('row', { name: /sku-A-000/ })).toBeVisible();
+  await expect(list.getByRole('button', { name: '折叠汤圆', exact: true })).toBeVisible();
+  await list.getByRole('button', { name: '折叠汤圆', exact: true }).press('Enter');
+  await expect(list.getByRole('row', { name: /sku-A-000/ })).toHaveCount(0);
+  await expect(list.getByRole('button', { name: '展开汤圆', exact: true })).toBeFocused();
+  assert.equal(
+    calls.filter(
+      ({ queryId, parameters }) => queryId === 'lantern.production' && parameters.sku_detail,
+    ).length,
+    1,
+  );
+  assert.ok(
+    calls
+      .filter(({ queryId }) => queryId === 'lantern.production')
+      .every(({ parameters }) => parameters.product_category === '汤圆'),
+  );
+  await page.setViewportSize({ width: 390, height: 850 });
+  await expect(dashboard.getByRole('searchbox', { name: 'SKU', exact: true })).toBeVisible();
+  await expect
+    .poll(
+      async () =>
+        new Set(
+          await cards.evaluateAll((items) =>
+            items.map((item) => Math.round(item.getBoundingClientRect().top)),
+          ),
+        ).size,
+    )
+    .toBe(3);
   assert.deepEqual(errors, []);
 });
 

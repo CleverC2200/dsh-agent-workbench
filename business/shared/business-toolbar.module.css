@@ -63,6 +63,16 @@
   width: auto;
   max-width: 100%;
 }
+.header .filters :is(label, select, [aria-haspopup='listbox'], [type='search']) {
+  font-size: var(--workbench-filter-font-size, 12px);
+  font-weight: 700;
+}
+.header .filters :is(select, [aria-haspopup='listbox'], [type='search']) {
+  line-height: var(--workbench-filter-line-height, 18px);
+}
+.header .filters input::placeholder {
+  font-weight: 600;
+}
 .header .filters > nav {
   display: flex;
   flex-wrap: nowrap;

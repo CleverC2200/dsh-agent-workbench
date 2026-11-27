@@ -55,26 +55,27 @@ export function AuthorQuestions({
     className: 'author-questions',
     'aria-label': '对话草稿快捷操作',
     children: [
-      jsx.jsxs('details', {
-        open: expanded,
-        children: [
-          jsx.jsx('summary', { children: '快捷分析问题' }),
-          jsx.jsx('div', {
-            className: 'author-question-list',
-            children: questions.map((question) =>
-              jsx.jsx(
-                Button,
-                {
-                  disabled: actions.pending,
-                  onClick: () => actions.question(question.text, question.label),
-                  children: question.label,
-                },
-                question.label,
+      questions.length > 0 &&
+        jsx.jsxs('details', {
+          open: expanded,
+          children: [
+            jsx.jsx('summary', { children: '快捷分析问题' }),
+            jsx.jsx('div', {
+              className: 'author-question-list',
+              children: questions.map((question) =>
+                jsx.jsx(
+                  Button,
+                  {
+                    disabled: actions.pending,
+                    onClick: () => actions.question(question.text, question.label),
+                    children: question.label,
+                  },
+                  question.label,
+                ),
               ),
-            ),
-          }),
-        ],
-      }),
+            }),
+          ],
+        }),
       draft.trim() &&
         jsx.jsxs('div', {
           className: 'author-draft-recovery',

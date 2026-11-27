@@ -88699,7 +88699,7 @@
       "title": "完整日汇总读取版本",
       "parameterSpec": {},
       "request": {
-        "sql": "/* inventory-branch-exclusions:N436,Y204 */ SELECT m.inv_batch_id AS batch_id, MAX(m.inv_business_date) AS business_date, MAX(m.stock_date) AS stock_date, MAX(m.stat_month) AS target_month FROM agents_inv_branch_sku_day AS m WHERE (m.inv_variant_id = 'WAREHOUSE_BASE:__READY__' AND m.inv_rule_version = 'inventory-daily-v5-20261103' AND NOT m.warehouseid IS NULL) AND (m.warehouseid IS NULL OR m.warehouseid IN ('Y204', 'N436', 'A221')) GROUP BY m.inv_batch_id HAVING (COUNT(m.stock_date) = COUNT(*) AND MIN(m.stock_date) = MAX(m.stock_date) AND COUNT(m.inv_business_date) = COUNT(*) AND MIN(m.inv_business_date) = MAX(m.inv_business_date) AND COUNT(m.stat_month) = COUNT(*) AND MIN(m.stat_month) = MAX(m.stat_month)) AND COUNT(DISTINCT m.warehouseid) = 3 ORDER BY m.inv_batch_id DESC LIMIT 1",
+        "sql": "/* inventory-branch-exclusions:N436,Y204 */ SELECT m.inv_batch_id AS batch_id, MAX(m.inv_business_date) AS business_date, MAX(m.stock_date) AS stock_date, MAX(m.stat_month) AS target_month FROM agents_inv_branch_sku_day AS m WHERE (m.inv_variant_id = 'WAREHOUSE_BASE:__READY__' AND m.inv_rule_version = 'inventory-daily-v5-20261103' AND NOT m.warehouseid IS NULL) AND (m.warehouseid IS NULL OR m.warehouseid IN ('Y204', 'N436', 'A221')) GROUP BY m.inv_batch_id HAVING (COUNT(m.stock_date) = COUNT(*) AND MIN(m.stock_date) = MAX(m.stock_date) AND COUNT(m.inv_business_date) = COUNT(*) AND MIN(m.inv_business_date) = MAX(m.inv_business_date) AND COUNT(m.stat_month) = COUNT(*) AND MIN(m.stat_month) = MAX(m.stat_month)) AND COUNT(DISTINCT m.warehouseid) = COUNT(*) ORDER BY m.inv_batch_id DESC LIMIT 1",
         "parameters": {},
         "includeTotal": false
       },

@@ -1,9 +1,9 @@
 import { completeHistoryMonths } from 'dsh-agent-manage/mps-compute/history';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
 import { sourceAmount } from './source-money.js';
-import { call } from '../../../business/shared/channel.js';
-import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
+import { createMpsQueryClient, readFailureText } from './mps-read.js';
 import { isBusinessDate, isCalendarMonthEnd, mpsBusinessDate } from './business-date.js';
+import { exceedsReadSizeLimit } from './read-size-limit.js';
 
 const number = (value) => {
   if (value === null) return '';
@@ -21,29 +21,45 @@ const text = (value) => {
   if (typeof value !== 'string') throw Error('事实来源返回了无效维度');
   return value;
 };
+const optionalQuantity = (value) =>
+  (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) &&
+  Number.isFinite(Number(value)) &&
+  Math.abs(Number(value)) <= Number.MAX_SAFE_INTEGER
+    ? Number(value)
+    : null;
 const reportQuantityPriority = 2;
-const reportAmountPriority = 1;
+const reportAmountPriority = -1;
 const standardFactPageSize = 200;
-const exceedsFactResponseLimit = (error) =>
-  [error, error?.cause].some((failure) =>
-    /\b(?:GEA_MCP_RESPONSE_TOO_LARGE|AI_GATEWAY_MCP_RESULT_TOO_LARGE)\b/.test(
-      `${failure?.code ?? ''} ${failure?.message ?? ''}`,
-    ),
-  );
+const historyPageSize = 500;
 
-export async function readFactMonth(type, month, signal, priority) {
+export async function readFactMonth(type, month, signal, priority, { largerPages = false } = {}) {
   if (!['report', 'history', 'plan-quantity'].includes(type)) throw Error('该事实来源尚未接入');
-  return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month, priority);
+  return readFacts(
+    'facts.' + type,
+    { month: month + '-01' },
+    signal,
+    type,
+    month,
+    priority,
+    largerPages,
+  );
 }
 export async function readHistoryAnnual(month, signal) {
   const period = previousFiscalYear(month);
-  return readFacts('facts.history-annual', period, signal, 'historyAnnual');
+  return readFacts('facts.history-annual', period, signal, 'historyAnnual', undefined, -1);
 }
-export async function readShipmentCoefficientFacts(periods, signal) {
+export async function readShipmentCoefficientFacts(periods, signal, priority) {
   if (periods.reason) return { reason: periods.reason };
   try {
     const read = ({ start, end }) =>
-      readFacts('facts.shipment-history', { start, end }, signal, 'shipmentHistory');
+      readFacts(
+        'facts.shipment-history',
+        { start, end },
+        signal,
+        'shipmentHistory',
+        undefined,
+        priority,
+      );
     const [elapsed, remaining] = await Promise.all([
       read(periods.elapsed),
       read(periods.remaining),
@@ -55,7 +71,7 @@ export async function readShipmentCoefficientFacts(periods, signal) {
     return { elapsed: elapsed.rows, remaining: remaining.rows, reason: '' };
   } catch (error) {
     if (signal?.aborted) throw error;
-    return { reason: '上月 BI 发运量读取失败' };
+    return { reason: '上月 BI 发运量读取失败', error: readFailureText(error) };
   }
 }
 export async function readHistoryWindow(month, signal, recent = []) {
@@ -74,7 +90,7 @@ export async function readHistoryWindow(month, signal, recent = []) {
           try {
             return {
               month,
-              ...(readMonths.get(month) ?? (await readFactMonth('history', month, signal))),
+              ...(readMonths.get(month) ?? (await readFactMonth('history', month, signal, -1))),
             };
           } catch (error) {
             if (signal?.aborted) throw error;
@@ -92,29 +108,22 @@ export async function readHistoryWindow(month, signal, recent = []) {
   }
   return { periods };
 }
-async function readFacts(id, parameters, signal, type, month, priority) {
+async function readFacts(id, parameters, signal, type, month, priority, largerPages = false) {
   const element = document.getElementById('agent-sql-config');
   if (!element) throw Error('月主计划数据源尚未装载');
   const config = JSON.parse(element.textContent);
   const definition = config.queries[id];
-  const client = createQueryClient(config, (_request, options) =>
-    call(
-      'sql',
-      {
-        queryId: options.queryId,
-        parameters: options.values,
-      },
-      { signal: options.signal },
-    ),
-  );
+  const client = createMpsQueryClient(config);
   if (type === 'shipmentDate')
     return client.read(id, parameters, { signal, priority, requiredColumns: definition.columns });
+  const evaluationMovement = type === 'evaluationMovement';
   if (
     type === 'report' ||
     type === 'plan-quantity' ||
     type === 'shipment' ||
     type === 'inventoryTargets' ||
-    type === 'evaluationInventory'
+    type === 'evaluationInventory' ||
+    evaluationMovement
   ) {
     const result = await client.readAll(
       id,
@@ -122,16 +131,22 @@ async function readFacts(id, parameters, signal, type, month, priority) {
       {
         signal,
         keyFields: definition.grain,
-        requiredColumns: definition.columns,
+        requiredColumns: evaluationMovement ? definition.grain : definition.columns,
+        allowPartial: evaluationMovement,
         maxRows: 100000,
         priority: priority ?? (type === 'report' ? reportQuantityPriority : undefined),
       },
     );
-    if (type === 'shipment' || type === 'inventoryTargets' || type === 'evaluationInventory')
+    if (
+      type === 'shipment' ||
+      type === 'inventoryTargets' ||
+      type === 'evaluationInventory' ||
+      evaluationMovement
+    )
       return {
         rows: result.rows,
         metadata: {
-          partial: false,
+          partial: result.partial ?? false,
           warnings: [],
           total: result.total,
           configVersion: result.configVersion,
@@ -192,58 +207,97 @@ async function readFacts(id, parameters, signal, type, month, priority) {
       },
     };
   }
+  const maximum = definition.parameterSpec.page_size.maximum;
+  const preferred =
+    type === 'history' && !largerPages ? Math.min(maximum, historyPageSize) : maximum;
+  const fallback = type === 'history' ? historyPageSize : standardFactPageSize;
+  const sizes = [
+    ...new Set([
+      preferred,
+      Math.min(preferred, fallback),
+      Math.min(preferred, standardFactPageSize),
+    ]),
+  ];
   const rows = [],
-    seen = new Set(),
     warnings = [];
-  let total,
-    version,
-    signature,
-    partial = false;
-  let pageSize = definition.parameterSpec.page_size.maximum;
-  let offset = 0;
-  while (total === undefined || offset < total) {
-    let result;
-    try {
-      result = await client.read(
+  const seen = new Set();
+  let total, version, signature;
+  let partial = false;
+  const readPages = async (pageSize) => {
+    const stop = new AbortController();
+    const pageSignal = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
+    const readPage = (offset, pagePriority = priority) =>
+      client.read(
         id,
         { ...parameters, page_size: pageSize, offset },
         {
-          signal,
-          priority,
+          signal: pageSignal,
+          priority: pagePriority,
           requiredColumns: definition.columns,
         },
       );
-    } catch (error) {
-      if (signal?.aborted || pageSize <= standardFactPageSize || !exceedsFactResponseLimit(error))
-        throw error;
-      pageSize = standardFactPageSize;
-      continue;
-    }
+    const acceptPage = (result, offset) => {
+      if (
+        result.totalRowCount !== total ||
+        result.configVersion !== version ||
+        JSON.stringify(result.returnedColumns) !== signature ||
+        result.offset !== offset ||
+        result.rows.length !== Math.min(pageSize, total - offset) ||
+        result.hasMorePages !== offset + result.rows.length < total
+      )
+        throw Error('事实分页或配置发生变化，未采用不完整结果，请重新同步');
+      for (const row of result.rows) {
+        const key = JSON.stringify(definition.grain.map((field) => row[field]));
+        if (seen.has(key)) throw Error('事实分页出现重复业务键，未采用不完整结果');
+        seen.add(key);
+        rows.push(row);
+      }
+      partial ||= result.dataStatus === 'partial';
+      warnings.push(...(result.warnings ?? []));
+    };
     if (total === undefined) {
-      total = result.totalRowCount;
-      version = result.configVersion;
-      signature = JSON.stringify(result.returnedColumns);
+      const first = await readPage(0);
+      total = first.totalRowCount;
+      version = first.configVersion;
+      signature = JSON.stringify(first.returnedColumns);
+      if (!Number.isSafeInteger(total) || total < 0 || total > 100000)
+        throw Error('事实读取范围超过上限或缺少完整计数');
+      acceptPage(first, 0);
     }
-    if (!Number.isSafeInteger(total) || total < 0 || total > 100000)
-      throw Error('事实读取范围超过上限或缺少完整计数');
-    if (
-      result.totalRowCount !== total ||
-      result.configVersion !== version ||
-      JSON.stringify(result.returnedColumns) !== signature ||
-      result.offset !== offset ||
-      result.rows.length !== Math.min(pageSize, total - offset) ||
-      result.hasMorePages !== offset + result.rows.length < total
-    )
-      throw Error('事实分页或配置发生变化，未采用不完整结果，请重新同步');
-    for (const row of result.rows) {
-      const key = JSON.stringify(definition.grain.map((field) => row[field]));
-      if (seen.has(key)) throw Error('事实分页出现重复业务键，未采用不完整结果');
-      seen.add(key);
-      rows.push(row);
+    if (type === 'shipmentHistory') {
+      let next = rows.length;
+      let failure;
+      const pages = new Map();
+      const readRemaining = async () => {
+        while (!pageSignal.aborted && next < total) {
+          const offset = next;
+          next += pageSize;
+          try {
+            pages.set(offset, await readPage(offset, Math.min(priority ?? 3, 3)));
+          } catch (error) {
+            if (!failure) failure = { error };
+            stop.abort(error);
+          }
+        }
+      };
+      await Promise.all([readRemaining(), readRemaining()]);
+      signal?.throwIfAborted();
+      while (pages.has(rows.length)) acceptPage(pages.get(rows.length), rows.length);
+      if (failure) throw failure.error;
+      pageSignal.throwIfAborted();
+    } else {
+      for (let offset = rows.length; offset < total; offset += pageSize)
+        acceptPage(await readPage(offset), offset);
     }
-    partial ||= result.dataStatus === 'partial';
-    warnings.push(...(result.warnings ?? []));
-    offset += pageSize;
+  };
+  for (const [index, size] of sizes.entries()) {
+    try {
+      await readPages(size);
+      break;
+    } catch (error) {
+      if (signal?.aborted || index === sizes.length - 1 || !exceedsReadSizeLimit(error))
+        throw error;
+    }
   }
   const prefix = 'agents_scm_cust_deliv_daily_di.';
   const records = rows.map((row) => {
@@ -286,65 +340,45 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
     isBusinessDate(viewDate) && viewDate >= draft.month + '-01' && viewDate < today
       ? viewDate
       : today;
-  const read = (id, parameters, project) =>
-    readFacts(id, parameters, signal, 'evaluationInventory')
+  const cutoffMonth = cutoff.slice(0, 7);
+  const lastMonth = months.at(-1);
+  const read = (id, parameters, project, type = 'evaluationMovement') =>
+    readFacts(id, parameters, signal, type)
       .then((result) => ({ ...result, rows: project(result.rows) }))
       .catch((error) => {
         signal.throwIfAborted();
         return { rows: [], error: error.message };
       });
   const [monthly, physical, transit] = await Promise.all([
-    cutoff >= draft.month + '-01'
+    cutoffMonth >= draft.month
       ? read(
           'facts.inventory-movements',
-          { start_month: draft.month + '-01', end_month: months.at(-1) + '-01', cutoff },
+          {
+            start_month: draft.month + '-01',
+            end_month: (lastMonth < cutoffMonth ? lastMonth : cutoffMonth) + '-01',
+            cutoff,
+          },
           (rows) =>
             rows.flatMap((row) => {
               const month = row.stock_month?.slice(0, 7);
               const sourceDate = row.source_date;
               if (
-                number(row.source_rows) !== 1 ||
                 !months.includes(month) ||
                 !isBusinessDate(sourceDate) ||
                 sourceDate.slice(0, 7) !== month ||
                 sourceDate > cutoff
               )
                 return [];
-              const chosenPlan = row.produce_plan_adj ?? row.produce_plan;
-              const actual = row.production_actual === null ? null : number(row.production_actual);
-              const plan = chosenPlan === null ? null : number(chosenPlan);
-              const monthClosed = isCalendarMonthEnd(sourceDate);
-              const actualAlreadyCoversPlan =
-                plan === 0 || (actual !== null && plan !== null && plan > 0 && actual > plan);
-              const transfer = (direction) => {
-                const value =
-                  row[`transfer_${direction}_plan_adj`] ?? row[`transfer_${direction}_plan_v1`];
-                return value === null ? null : number(value);
-              };
               return [
                 {
                   month,
-                  base: text(row.belong_base),
-                  code: text(row.material_code),
+                  base: text(row.belong_base ?? null),
+                  code: text(row.material_code ?? null),
                   sourceDate,
-                  opening: row.begin_stock === null ? null : number(row.begin_stock),
-                  productionInbound:
-                    actual === null
-                      ? null
-                      : monthClosed || actualAlreadyCoversPlan
-                        ? actual
-                        : plan !== null && plan > 0
-                          ? plan
-                          : null,
-                  productionBasis: monthClosed
-                    ? '月末实绩'
-                    : actualAlreadyCoversPlan && actual !== 0
-                      ? '已入库净实绩，含冲销'
-                      : row.produce_plan_adj !== null
-                        ? '纠偏生产计划'
-                        : '初版生产计划',
-                  transferIn: transfer('in'),
-                  transferOut: transfer('out'),
+                  opening: optionalQuantity(row.begin_stock),
+                  productionInbound: optionalQuantity(row.production_actual),
+                  transferIn: optionalQuantity(row.transfer_in_actual),
+                  transferOut: optionalQuantity(row.transfer_out_actual),
                 },
               ];
             }),
@@ -354,15 +388,19 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
     basis.draftId === draft.id &&
     ['ok', 'partial'].includes(basis.status) &&
     isCalendarMonthEnd(basis.cutoff)
-      ? read('facts.opening-physical', { cutoff: basis.cutoff }, (rows) =>
-          rows.map((row) => ({
-            base: text(row.belong_base),
-            code: text(row.material_code),
-            opening: row.quantity === null ? null : number(row.quantity),
-          })),
+      ? read(
+          'facts.opening-physical',
+          { cutoff: basis.cutoff },
+          (rows) =>
+            rows.map((row) => ({
+              base: text(row.belong_base),
+              code: text(row.material_code),
+              opening: row.quantity === null ? null : number(row.quantity),
+            })),
+          'evaluationInventory',
         ).then((result) => ({ ...result, cutoff: basis.cutoff }))
       : null,
-    cutoff >= draft.month + '-01'
+    cutoffMonth >= draft.month
       ? read(
           'facts.inventory-transit',
           {
@@ -375,9 +413,10 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
           (rows) =>
             rows.flatMap((row) => {
               const month = row.arrival_month;
-              const quantity = number(row.quantity);
-              const sourceOrders = number(row.source_orders);
+              const quantity = optionalQuantity(row.quantity);
+              const sourceOrders = optionalQuantity(row.source_orders);
               return months.includes(month) &&
+                month <= cutoffMonth &&
                 quantity > 0 &&
                 Number.isSafeInteger(sourceOrders) &&
                 sourceOrders > 0
@@ -395,7 +434,7 @@ export async function readEvaluationInventory(draft, basis, months, signal) {
         )
       : null,
   ]);
-  return { monthly, physical, transit };
+  return { cutoff, monthly, physical, transit };
 }
 
 export async function readLatestShipmentDate(through, signal, priority) {
@@ -426,6 +465,8 @@ export async function readShipmentInputs(cutoff, signal, priority) {
   const [year, monthNumber] = month.split('-').map(Number);
   const totalDays = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const recentStart = `${month}-${String(Math.max(1, passed - 2)).padStart(2, '0')}`;
+  const sourceDate = (date) =>
+    isBusinessDate(date) && date.startsWith(month + '-') && date <= cutoff ? date : null;
   const result = await readFacts(
     'facts.shipment',
     { month: month + '-01', cutoff, recent_start: recentStart },
@@ -444,29 +485,21 @@ export async function readShipmentInputs(cutoff, signal, priority) {
           row[field] === null ? null : number(row[field]),
         ]),
       );
-      const transferDate = row.transfer_date;
-      const transferRows = number(row.transfer_rows);
-      const transferSnapshotIssue =
-        !isBusinessDate(transferDate) || transferDate.slice(0, 7) !== month || transferDate > cutoff
-          ? '调拨计划缺少适用快照日期，来源待核'
-          : transferRows !== 1
-            ? '调拨计划最新快照重复或冲突，未采用计划数量'
-            : '';
-      const transfer = (direction) => {
-        if (transferSnapshotIssue) return { value: null, source: transferSnapshotIssue };
-        const adjusted = row[`transfer_${direction}_plan_adj`];
-        const initial = row[`transfer_${direction}_plan_v1`];
-        return adjusted !== null
-          ? { value: number(adjusted), source: `${transferDate} 纠偏计划` }
-          : initial !== null
-            ? { value: number(initial), source: `${transferDate} 初版计划` }
-            : {
-                value: null,
-                source: `${transferDate} ${direction === 'in' ? '调入' : '调出'}计划字段为空`,
-              };
+      const transfer = (direction, label) => {
+        const date = sourceDate(row[`transfer_${direction}_date`]);
+        const value = number(row[`transfer_${direction}_qty`]);
+        return {
+          label,
+          date,
+          value,
+          source: date
+            ? `${date} 日度计划明细${number(row[`transfer_${direction}_adjusted`]) === 1 ? '纠偏计划' : '初版计划'}`
+            : `当月截至${cutoff}无有效${label}数量，按0计算`,
+          conflictingDays: number(row[`transfer_${direction}_conflicts`]),
+        };
       };
-      const transferIn = transfer('in');
-      const transferOut = transfer('out');
+      const transferIn = transfer('in', '调入计划');
+      const transferOut = transfer('out', '调出计划');
       return {
         month,
         base: text(row.belong_base),
@@ -476,19 +509,16 @@ export async function readShipmentInputs(cutoff, signal, priority) {
         series: text(row.series),
         group: text(row.product_item),
         ...quantities,
+        openingStockDate: sourceDate(row.open_date),
+        monthOrder: row.month_order_qty == null ? null : number(row.month_order_qty),
         rawAverage: row.raw_average === null ? null : number(row.raw_average),
         transferIn: transferIn.value,
         transferOut: transferOut.value,
         transferInSource: transferIn.source,
         transferOutSource: transferOut.source,
-        transferDate,
-        transferIssue: [
-          ...new Set(
-            [transferIn, transferOut]
-              .filter(({ value }) => value === null)
-              .map(({ source }) => source),
-          ),
-        ].join('；'),
+        transferInDate: transferIn.date,
+        transferOutDate: transferOut.date,
+        transferIssues: [transferIn, transferOut].filter((plan) => plan.conflictingDays > 0),
         remaining:
           quantities.inbound == null || passed <= 1
             ? null
@@ -501,12 +531,14 @@ export async function readShipmentInputs(cutoff, signal, priority) {
   };
 }
 
-export async function readInventoryTargets(month, endMonth, signal) {
+export async function readInventoryTargets(month, endMonth, signal, priority) {
   const result = await readFacts(
     'inventory-targets.detail',
     { start_month: month, end_month: endMonth },
     signal,
     'inventoryTargets',
+    undefined,
+    priority,
   );
   return {
     rows: result.rows.map((row) => ({
@@ -557,16 +589,7 @@ export async function readReportAmounts(month, signal) {
       error: '提报金额来源尚未配置，月初和最终计划金额待补',
     };
   try {
-    const client = createQueryClient(config, (_request, options) =>
-      call(
-        'sql',
-        {
-          queryId: options.queryId,
-          parameters: options.values,
-        },
-        { signal: options.signal },
-      ),
-    );
+    const client = createMpsQueryClient(config);
     const result = await client.readAll(
       'facts.report-amounts',
       { month: month + '-01', page_size: 5000, offset: 0 },

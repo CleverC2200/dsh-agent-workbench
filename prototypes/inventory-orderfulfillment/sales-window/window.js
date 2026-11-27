@@ -29,6 +29,32 @@ const rateReady = (value) => {
   return rate !== null && rate >= 90 && rate <= 100;
 };
 const quantityText = (value) => (knownNumber(value) === null ? '—' : value + ' 箱');
+const pendingOrderReason = (row) => {
+  if (typeof row.reason === 'string' && row.reason.trim()) return row.reason.trim();
+  const snapshot = row.snapshot || {},
+    lines = Array.isArray(snapshot.lines)
+      ? snapshot.lines.filter((line) => line && typeof line === 'object')
+      : [],
+    reasons = [];
+  if (snapshot.credit?.status === 'insufficient' || snapshot.omsEventType === 'CREDIT_CHECK_FAILED')
+    reasons.push('信用额度校验未通过，待核实补充情况。');
+  if (
+    (snapshot.omsEventType === 'PRICE_CHECK_FAILED' && !snapshot.priceRecheckedAt) ||
+    [snapshot.priceStatus, ...lines.map((line) => line.priceStatus)].some(
+      (status) => typeof status === 'string' && status.trim() && status !== 'READY',
+    )
+  )
+    reasons.push('商品价格校验未通过，待核实价格。');
+  const rate = knownNumber(snapshot.satisfactionRate);
+  const shortage = lines.some((line) => knownNumber(line.shortage) > 0);
+  if (rate === null || rate < 0 || rate > 100)
+    reasons.push('订单满足率尚未明确，待核对库存满足情况。');
+  else if (rate === 100 && shortage) reasons.push('满足率与缺货明细不一致，待核对库存。');
+  else if (shortage || rate < 90) reasons.push('库存不足，待核对库存及商品数量。');
+  else if (lines.some((line) => knownNumber(line.shortage) === null))
+    reasons.push('商品缺货信息未完整提供，待核对库存满足情况。');
+  return reasons.length ? reasons.join('\n') : '待销售核对订单信息并提交。';
+};
 const calendarDate = (offset = 0) => {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
@@ -238,9 +264,11 @@ function status() {
             : '已保存暂缓决定，截止：') + d.deferred_until
         : d?.action_id === 'confirm_shipment'
           ? '已保存销售确认决定'
-          : state?.status === 'processing'
-            ? '正在处理，请稍后刷新'
-            : '该订单确认任务已结束';
+          : state?.editor?.modificationState === 'succeeded'
+            ? '已提交OMS，本次提交已完成，请勿重复提交。'
+            : state?.status === 'processing'
+              ? '正在处理，请稍后刷新'
+              : '该订单确认任务已结束';
   }
 }
 async function load() {
@@ -364,6 +392,42 @@ async function load() {
             if (modifying) await load();
             throw Error(receipt.message || '处理状态：' + receipt.status + '，请重新核对后操作');
           }
+          if (modifying && receipt.orderModified === true) {
+            state = {
+              ...state,
+              status: 'resolved',
+              submission: { status: 'submitted', label: '已提交' },
+              editor: {
+                ...state.editor,
+                editable: false,
+                canSubmit: false,
+                modificationState: 'succeeded',
+                submission: { status: 'submitted', label: '已提交' },
+                submittedOrder: {
+                  ...draft,
+                  vehicleType: draft.vehicleType || state.snapshot.vehicleType,
+                },
+                reason: '已提交OMS，本次提交已完成，请勿重复提交。',
+              },
+              orderRefresh: { status: 'waiting', message: '已提交，正在读取最新订单状态。' },
+            };
+            const showReceipt = () =>
+              window.OrderShortageEditor.mount(document, {
+                ...state,
+                onRefreshOrder: () => load(),
+              });
+            showReceipt();
+            try {
+              await load();
+            } catch {
+              state.orderRefresh = {
+                status: 'waiting',
+                message: '已提交成功，最新状态读取失败，请刷新查看；请勿重复提交。',
+              };
+              showReceipt();
+            }
+            return;
+          }
           await load();
         } catch (error) {
           if (
@@ -396,6 +460,7 @@ async function load() {
 
   if (mode === 'list') {
     element('title').textContent = '最近 8 天的订单确认记录';
+    element('title').hidden = false;
     element('summary').textContent = '仅展示分派给你的订单';
     element('quantity').textContent = '';
     element('defer').hidden = true;
@@ -408,8 +473,16 @@ async function load() {
       link.textContent = row.snapshot.orderNo;
       link.href = row.entryUrl + '&view=details';
       info.textContent =
-        row.snapshot.customer + '；' + (row.status === 'pending' ? '待处理' : '已处理');
+        row.snapshot.customer +
+        '；' +
+        (row.submission?.label || (row.status === 'pending' ? '待处理' : '已处理'));
       item.append(link, info);
+      if (row.status === 'pending') {
+        const reason = document.createElement('p');
+        reason.className = 'order-list-reason';
+        reason.textContent = '待处理原因：' + pendingOrderReason(row);
+        item.append(reason);
+      }
       if (row.status === 'pending')
         for (const [action, title] of [
           ['process', '订单处理'],
@@ -455,6 +528,8 @@ async function load() {
     state.permissions?.canAct === false
       ? '订单明细'
       : { confirm: '确认开单？', defer: '暂缓发货', details: '订单明细' }[mode];
+  element('title').hidden = true;
+  element('confirmationMain').setAttribute('aria-label', element('title').textContent);
   element('summary').textContent =
     '执行单号：' +
     (p.executionOrderNo || '—') +
@@ -550,6 +625,7 @@ load().catch((error) => {
   element('orderEditor').hidden = true;
   element('confirmationMain').hidden = false;
   element('title').textContent = '订单加载失败';
+  element('title').hidden = false;
   document.title = '订单加载失败';
   element('submit').hidden = true;
   element('process').hidden = true;

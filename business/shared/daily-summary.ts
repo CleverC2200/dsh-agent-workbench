@@ -7,6 +7,7 @@ export type DailySummarySnapshot =
       stockDate: string;
       targetMonth: string;
       defaultInventoryVersion?: string | null;
+      planScopeLocked?: true;
     };
 
 const date = (value: unknown): value is string => {
@@ -56,6 +57,9 @@ export function parseDailySummarySnapshot(result: unknown): DailySummarySnapshot
     stockDate,
     targetMonth,
     defaultInventoryVersion: inventoryVersion ?? null,
+    ...(['1', 'true'].includes(String(Reflect.get(row, 'plan_scope_locked')))
+      ? { planScopeLocked: true }
+      : {}),
   };
 }
 

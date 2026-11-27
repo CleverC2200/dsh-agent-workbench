@@ -26,10 +26,8 @@ test('正天数和回退采用同一周转报告，显示来源和下月需求�
   };
   const report = inventoryTurnoverReport(row);
   assert.equal(report.异常类别, '周转天数版本回退');
-  assert.equal(report.来源月, '2026-12');
-  assert.equal(report.来源版本, '滚动');
-  assert.equal(report.下月有效需求, 310);
-  assert.equal(report.回退原因, '2026-12 月初缺目标记录');
+  assert.match(report.来源, /来源月2026-12；版本滚动/);
+  assert.equal(report.原因, '2026-12 月初缺目标记录');
   assert.equal(report.计算依据, '15天×2026-12有效需求310÷31个自然日');
   const missing = inventoryTurnoverReport({ ...row, targetInventory: null, nextMonthDemand: null });
   assert.match(missing.实际处理, /目标库存仍待补/);

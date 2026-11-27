@@ -157,11 +157,20 @@ const inventoryQuantityLabels = new Set([
 ]);
 
 export function formatInventoryMetricTextParts(label: string, text: string) {
-  if (!inventoryQuantityLabels.has(label)) return { value: text, unit: '' };
-  const match = text
-    .trim()
-    .match(/^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(件|箱)?(（部分）)?$/u);
-  if (!match) return { value: text, unit: '' };
-  const formatted = formatChainValueParts(Number(match[1].replaceAll(',', '')), match[2] || '件');
-  return { value: formatted.value, unit: formatted.unit + (match[3] || '') };
+  if (inventoryQuantityLabels.has(label)) {
+    const match = text
+      .trim()
+      .match(/^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(件|箱)?(（部分）)?$/u);
+    if (match) {
+      const formatted = formatChainValueParts(
+        Number(match[1].replaceAll(',', '')),
+        match[2] || '件',
+      );
+      return { value: formatted.value, unit: formatted.unit + (match[3] || '') };
+    }
+  }
+  const parts = text.match(
+    /^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(\s*(?:天|[%％]|[万亿]?[件箱](?:\/天)?)(?:（部分）)?\s*)$/u,
+  );
+  return parts ? { value: parts[1], unit: parts[2] } : { value: text, unit: '' };
 }

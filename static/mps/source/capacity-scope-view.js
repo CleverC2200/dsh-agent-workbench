@@ -1,12 +1,19 @@
+import { downloadWorkbook } from './workbook.js';
+import { renderTablePagination } from './report-page.js';
 import { selectCapacityScope } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { useStepViewField } from './step-view-state.js';
+import { createCalculationHelp } from './calculation-help.js';
+import { odmDemandFooter, odmDemandLabel, odmDemandTotal } from './odm-demand.js';
 
-export function createCapacityScopeView(react, downloadCsv) {
+export function createCapacityScopeView(react) {
   const h = react.createElement;
+  const CalculationHelp = createCalculationHelp(react);
   return function CapacityScopeView({
     plan,
     month,
     filters,
+    showOdmDemand,
+    isDelisted,
     view,
     active,
     card,
@@ -29,27 +36,19 @@ export function createCapacityScopeView(react, downloadCsv) {
     const workshopLines = baseLines.filter(
       (row) => workshop === undefined || row.workshop === workshop,
     );
-    const productionLines = [
-      ...new Set(
-        workshopLines.flatMap((row) => (row.productionLines.length ? row.productionLines : [''])),
-      ),
-    ];
-    const line = productionLines.includes(selection.line) ? selection.line : undefined;
-    const lineRows = workshopLines.filter(
-      (row) =>
-        line === undefined ||
-        (line === '' ? !row.productionLines.length : row.productionLines.includes(line)),
-    );
-    const resourceId = lineRows.some((row) => row.resourceId === selection.resourceId)
+    const resourceId = workshopLines.some((row) => row.resourceId === selection.resourceId)
       ? selection.resourceId
       : '';
-    const scope = { month, base, workshop, line, resourceId };
+    const scope = { month, base, workshop, resourceId };
     const selected = selectCapacityScope(report, scope, level);
+    const odmDemand =
+      showOdmDemand && workshop === undefined && !resourceId
+        ? odmDemandTotal(report.productDetails, { ...filters, base, month })
+        : null;
     const label = [
       base || '全国',
       workshop === '' ? '车间归属待补' : workshop,
-      line === '' ? '产线归属待补' : line,
-      resourceId ? selected.lines[0]?.tunnel || resourceId : '',
+      resourceId ? selected.lines[0]?.tunnel || '隧道号待补' : '',
     ]
       .filter((value) => value !== undefined && value !== '')
       .join(' / ');
@@ -60,24 +59,20 @@ export function createCapacityScopeView(react, downloadCsv) {
     );
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(productRows.length / 25) - 1));
     const shownProducts = productRows.slice(pageIndex * 25, (pageIndex + 1) * 25);
-    const issues = report.hierarchyIssues.filter((row) =>
-      selected.lines.some((line) => line.resourceId === row.resourceId),
+    const issues = report.hierarchyIssues.filter(
+      (row) =>
+        !row.reason.startsWith('产线归属待补') &&
+        selected.lines.some((line) => line.resourceId === row.resourceId),
     );
     const change = (field, value) => {
       setPage(0);
       setSelection((current) => ({
-        ...(field === 'base'
-          ? {}
-          : field === 'workshop'
-            ? { base: current.base }
-            : field === 'line'
-              ? { base: current.base, workshop: current.workshop }
-              : current),
+        ...(field === 'base' ? {} : field === 'workshop' ? { base: current.base } : current),
         [field]: value,
       }));
     };
-    const scopeTable = (name, columns, rows) =>
-      react.cloneElement(table(name, columns, rows), {
+    const scopeTable = (name, columns, rows, footer) =>
+      react.cloneElement(table(name, columns, rows, undefined, footer), {
         role: 'region',
         'aria-label': `${name}滚动区`,
         tabIndex: 0,
@@ -144,7 +139,7 @@ export function createCapacityScopeView(react, downloadCsv) {
           (allocation) => ids.has(allocation.resourceId) && allocation.tons > 0,
         ),
       );
-      return occupied ? '本轮排产已计算' : '本轮排产已计算，实际占用为0';
+      return occupied ? '本轮排产已计算' : '本轮排产已计算，排产占用为0';
     };
     const utilization = (demand) =>
       demand !== null && selected.capacity !== null && selected.capacity > 0
@@ -178,9 +173,7 @@ export function createCapacityScopeView(react, downloadCsv) {
         设备范围: label,
         基地: row.base,
         车间: row.workshop || '车间归属待补',
-        产线: row.productionLines.join('、') || '产线归属待补',
         隧道号: row.tunnel || '隧道号待补',
-        物理资源ID: row.resourceId,
         日标准产能吨数: row.dailyTons,
         生产天数: row.days,
         月产能吨数: row.capacity,
@@ -192,24 +185,211 @@ export function createCapacityScopeView(react, downloadCsv) {
         排产状态: scheduleState([row.resourceId]),
       };
     });
-    const download = (name, rows) =>
-      downloadCsv(
-        `${month}-${name}.csv`,
-        ['本轮预测计算范围', '排除单品记录数', ...Object.keys(rows[0] ?? scopeColumns)],
-        rows.map((row) => ({
-          本轮预测计算范围: plan.partial ? '部分可计算，待定单品已排除' : '当前参与范围',
-          排除单品记录数: plan.excludedShipments?.length ?? 0,
-          ...row,
-        })),
+    const issueRows = issues.map((row) => ({
+      基地: row.base,
+      名称: row.name,
+      问题: row.reason,
+      来源: row.sourceTable,
+    }));
+    const unassignedProducts = selected.unassigned.filter((row) => !isDelisted(row));
+    const unassignedRows = report.demandIssues
+      .filter(
+        (row) =>
+          row.kind === '无有效设备关联' &&
+          row.month === month &&
+          (!base || row.base === base) &&
+          !isDelisted(row),
+      )
+      .map((row) => ({
+        月份: row.month,
+        基地: row.base,
+        SKU: row.code,
+        问题: row.reason,
+        源表: row.sourceTable,
+        字段: row.fields,
+      }));
+    const exportWorkbook = () =>
+      downloadWorkbook(
+        `${month}-设备范围与产品占用.xlsx`,
+        [
+          [
+            '产品占用',
+            odmDemand
+              ? [
+                  ...exportRows,
+                  {
+                    ...scopeColumns,
+                    名称: odmDemandLabel,
+                    关联需求吨数: odmDemand.value,
+                    已知关联需求吨数: odmDemand.value === null ? odmDemand.known : null,
+                    待补需求项数: odmDemand.missing || null,
+                  },
+                ]
+              : exportRows,
+          ],
+          [
+            '设备范围',
+            odmDemand
+              ? [
+                  ...equipmentRows,
+                  {
+                    月份: month,
+                    设备范围: label,
+                    基地: odmDemandLabel,
+                    关联需求吨数: odmDemand.value,
+                    已知关联需求吨数: odmDemand.value === null ? odmDemand.known : null,
+                    待补需求项数: odmDemand.missing || null,
+                  },
+                ]
+              : equipmentRows,
+          ],
+          ['设备归属问题', issueRows],
+          ['无设备关联需求', unassignedRows],
+        ]
+          .filter(([, rows]) => rows.length)
+          .map(([name, rows]) => ({ name, columns: Object.keys(rows[0]), rows })),
       );
     return card(
       '设备范围与产品占用',
       h(
         react.Fragment,
         null,
+        scopeTable(
+          '所选设备范围汇总',
+          [
+            '设备范围',
+            '物理隧道数',
+            '关联需求（吨）',
+            '日标准产能（吨/日）',
+            '月产能（吨）',
+            '隧道利用率',
+            '排产占用（吨）',
+            '排产状态',
+          ],
+          [
+            [
+              label,
+              selected.lines.length,
+              metric(selected.demand),
+              numberText(selected.dailyTons),
+              numberText(selected.capacity),
+              percent(selected.load),
+              numberText(selected.scheduledTons),
+              scheduleState(resourceIds),
+            ],
+          ],
+          odmDemandFooter(odmDemand, 2, numberText),
+        ),
+        scopeTable(
+          '设备范围产品占用',
+          [
+            '大类',
+            '物料组',
+            '需求基地',
+            'SKU',
+            '名称',
+            '关联需求（吨）',
+            '隧道利用率',
+            '排产占用（吨）',
+            '范围产能占比',
+            '排产状态',
+          ],
+          shownProducts.map((row) => [
+            row.category || '大类待补',
+            level === 'category' ? '—' : row.group || '物料组待补',
+            row.base || '—',
+            row.code || '—',
+            row.name,
+            metric(row.demand),
+            percent(utilization(row.demand.value)),
+            numberText(row.scheduledTons),
+            percent(row.occupancy),
+            scheduleState(resourceIds, row),
+          ]),
+          odmDemandFooter(odmDemand, 5, numberText),
+        ),
+        renderTablePagination(h, {
+          label: '所选设备范围产品需求',
+          page: pageIndex,
+          total: productRows.length,
+          onPageChange: setPage,
+          buttonLabels: ['上一页产品', '下一页产品'],
+        }),
+        scopeTable(
+          '设备范围明细',
+          [
+            '基地',
+            '车间',
+            '隧道号',
+            '日标准产能（吨/日）',
+            '生产天数',
+            '月产能（吨）',
+            '关联需求（吨）',
+            '隧道利用率',
+            '排产占用（吨）',
+            '排产状态',
+          ],
+          equipmentRows.map((row) => [
+            row.基地,
+            row.车间,
+            row.隧道号,
+            numberText(row.日标准产能吨数),
+            row.生产天数 ?? '待补',
+            numberText(row.月产能吨数),
+            metric({
+              value: row.关联需求吨数,
+              known: row.已知关联需求吨数,
+              missing: row.待补需求项数,
+            }),
+            percent(row.隧道利用率),
+            numberText(row.实际占用吨数),
+            row.排产状态,
+          ]),
+          odmDemandFooter(odmDemand, 6, numberText),
+        ),
+        issues.length
+          ? h(
+              react.Fragment,
+              null,
+              h('h3', { className: 'wf-target-heading' }, '设备归属问题'),
+              scopeTable(
+                '设备归属问题',
+                ['基地', '资源', '问题', '来源'],
+                issues.map((row) => [row.base, row.name, row.reason, row.sourceTable]),
+              ),
+            )
+          : null,
+        unassignedProducts.length
+          ? scopeTable(
+              '无设备关联需求',
+              ['基地', '大类', '物料组', 'SKU', '需求（吨）'],
+              unassignedProducts.map((row) => [
+                row.base,
+                row.category,
+                row.group,
+                row.code,
+                numberText(row.demandTons),
+              ]),
+            )
+          : null,
+      ),
+      h(
+        react.Fragment,
+        null,
         h(
           'div',
-          { className: 'wf-filters' },
+          { className: 'dc-toolbar dc-report-filters mps-table-controls' },
+          h('span', { className: 'dc-card-note' }, `设备数据月份 ${month}`),
+          h(
+            CalculationHelp,
+            { title: '设备范围 · 口径说明' },
+            h('p', null, '关联需求按当前设备范围去重。隧道利用率为关联需求吨数除以月产能。'),
+            h(
+              'p',
+              null,
+              '排产占用是本轮分配给隧道的生产吨数，包含供应给其他基地的调拨量。关联需求是该隧道可承接的需求，同一需求可关联多条隧道。',
+            ),
+          ),
           selector(
             '设备基地',
             base,
@@ -220,13 +400,12 @@ export function createCapacityScopeView(react, downloadCsv) {
             (value) => change('base', value),
           ),
           encodedSelector('设备车间', 'workshop', workshop, workshops, '车间归属待补'),
-          encodedSelector('设备产线', 'line', line, productionLines, '产线归属待补'),
           selector(
             '设备隧道',
             resourceId,
             [
               ['', '全部'],
-              ...lineRows.map((row) => [
+              ...workshopLines.map((row) => [
                 row.resourceId,
                 `${row.base} / ${row.workshop || '车间待补'} / ${row.tunnel || row.name}`,
               ]),
@@ -248,210 +427,20 @@ export function createCapacityScopeView(react, downloadCsv) {
           ),
         ),
         h(
-          'p',
-          { className: 'wf-note' },
-          '关联需求按当前设备范围的有效关联去重。多个候选设备可能对应同一需求，各设备需求不能直接相加；隧道利用率＝关联需求吨数÷月产能；实际占用来自本轮排产分配，包含调拨供给，未完成评估时的已分配量不能视为完整占用。产品占比使用当前范围去重总产能，不为各产品重复累计产能。',
+          'button',
+          {
+            className: 'mps-download',
+            disabled:
+              !active ||
+              (!exportRows.length &&
+                !equipmentRows.length &&
+                !issueRows.length &&
+                !unassignedRows.length &&
+                !odmDemand),
+            onClick: exportWorkbook,
+          },
+          '下载设备范围与产品占用',
         ),
-        scopeTable(
-          '所选设备范围汇总',
-          [
-            '设备范围',
-            '物理隧道数',
-            '关联需求（吨）',
-            '日标准产能（吨/日）',
-            '月产能（吨）',
-            '隧道利用率',
-            '实际占用（吨）',
-            '排产状态',
-          ],
-          [
-            [
-              label,
-              selected.lines.length,
-              metric(selected.demand),
-              numberText(selected.dailyTons),
-              numberText(selected.capacity),
-              percent(selected.load),
-              numberText(selected.scheduledTons),
-              scheduleState(resourceIds),
-            ],
-          ],
-        ),
-        h(
-          'div',
-          { className: 'wf-filters' },
-          h(
-            'button',
-            { disabled: !active, onClick: () => download('设备范围与产品占用', exportRows) },
-            '下载设备范围与产品占用',
-          ),
-          h(
-            'button',
-            { disabled: !active, onClick: () => download('设备范围明细', equipmentRows) },
-            '下载设备范围明细',
-          ),
-        ),
-        scopeTable(
-          '设备范围产品占用',
-          [
-            '大类',
-            '物料组',
-            '需求基地',
-            'SKU',
-            '名称',
-            '关联需求（吨）',
-            '隧道利用率',
-            '实际占用（吨）',
-            '范围产能占比',
-            '排产状态',
-          ],
-          shownProducts.map((row) => [
-            row.category || '大类待补',
-            level === 'category' ? '—' : row.group || '物料组待补',
-            row.base || '—',
-            row.code || '—',
-            row.name,
-            metric(row.demand),
-            percent(utilization(row.demand.value)),
-            numberText(row.scheduledTons),
-            percent(row.occupancy),
-            scheduleState(resourceIds, row),
-          ]),
-        ),
-        h(
-          'div',
-          { className: 'wf-filters' },
-          h(
-            'span',
-            null,
-            `产品共${productRows.length}项，当前第${pageIndex + 1}页，每页25项；下载包含全部筛选结果`,
-          ),
-          h(
-            'button',
-            { disabled: pageIndex === 0, onClick: () => setPage(pageIndex - 1) },
-            '上一页产品',
-          ),
-          h(
-            'button',
-            {
-              disabled: (pageIndex + 1) * 25 >= productRows.length,
-              onClick: () => setPage(pageIndex + 1),
-            },
-            '下一页产品',
-          ),
-        ),
-        scopeTable(
-          '设备范围明细',
-          [
-            '基地',
-            '车间',
-            '产线',
-            '隧道号',
-            '物理资源ID',
-            '日标准产能（吨/日）',
-            '生产天数',
-            '月产能（吨）',
-            '关联需求（吨）',
-            '隧道利用率',
-            '实际占用（吨）',
-            '排产状态',
-          ],
-          equipmentRows.map((row) => [
-            row.基地,
-            row.车间,
-            row.产线,
-            row.隧道号,
-            row.物理资源ID,
-            numberText(row.日标准产能吨数),
-            row.生产天数 ?? '待补',
-            numberText(row.月产能吨数),
-            metric({
-              value: row.关联需求吨数,
-              known: row.已知关联需求吨数,
-              missing: row.待补需求项数,
-            }),
-            percent(row.隧道利用率),
-            numberText(row.实际占用吨数),
-            row.排产状态,
-          ]),
-        ),
-        issues.length
-          ? h(
-              react.Fragment,
-              null,
-              h(
-                'button',
-                {
-                  disabled: !active,
-                  onClick: () =>
-                    download(
-                      '设备归属问题',
-                      issues.map((row) => ({
-                        基地: row.base,
-                        物理资源ID: row.resourceId,
-                        名称: row.name,
-                        问题: row.reason,
-                        来源: row.sourceTable,
-                      })),
-                    ),
-                },
-                '下载设备归属问题',
-              ),
-              scopeTable(
-                '设备归属问题',
-                ['基地', '资源', '问题', '来源'],
-                issues.map((row) => [row.base, row.name, row.reason, row.sourceTable]),
-              ),
-            )
-          : null,
-        selected.unassigned.length
-          ? h(
-              react.Fragment,
-              null,
-              h(
-                'p',
-                { className: 'wf-note' },
-                '以下需求没有有效设备关联，未纳入设备范围需求或虚构归属；同基地的全部问题保留在此。',
-              ),
-              h(
-                'button',
-                {
-                  disabled: !active,
-                  onClick: () =>
-                    download(
-                      '无设备关联需求',
-                      report.demandIssues
-                        .filter(
-                          (row) =>
-                            row.kind === '无有效设备关联' &&
-                            row.month === month &&
-                            (!base || row.base === base),
-                        )
-                        .map((row) => ({
-                          月份: row.month,
-                          基地: row.base,
-                          SKU: row.code,
-                          问题: row.reason,
-                          源表: row.sourceTable,
-                          字段: row.fields,
-                        })),
-                    ),
-                },
-                '下载无设备关联需求',
-              ),
-              scopeTable(
-                '无设备关联需求',
-                ['基地', '大类', '物料组', 'SKU', '需求（吨）'],
-                selected.unassigned.map((row) => [
-                  row.base,
-                  row.category,
-                  row.group,
-                  row.code,
-                  numberText(row.demandTons),
-                ]),
-              ),
-            )
-          : null,
       ),
     );
   };

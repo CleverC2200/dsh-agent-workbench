@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
+import { delimiter, resolve } from 'node:path';
 import { readFile } from './helpers/prepared-assets.mjs';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
@@ -21,6 +21,7 @@ const bundle = await build({
   bundle: true,
   write: false,
   platform: 'browser',
+  nodePaths: (process.env.WORKBENCH_BROWSER_NODE_PATH ?? '').split(delimiter).filter(Boolean),
   loader: { '.png': 'dataurl', '.css': 'text' },
 });
 async function documentFixture(t, pageId = 'business') {
@@ -165,6 +166,7 @@ for (const id of [
   'inventory-aqkc',
   'inventory-dealer',
   'inventory-apsplan',
+  'plan-category-production',
 ])
   test(`${id}: business content starts at the top and conversation controls remain accessible`, async (t) => {
     const page = await documentFixture(t, id);

@@ -125,9 +125,6 @@ export function createConstraintPanel(react, { Dialog }) {
         enabled ? '启用' : '停用',
       );
     };
-    const conflicts = evaluations.filter((row) =>
-      ['conflict', 'warning', 'pending', 'draft'].includes(row.status),
-    );
     const ruleOf = (entry) => rules.find((rule, index) => ruleId(rule, index) === entry.ruleId);
     const summary = (values) => {
       const loads = values.resourceLoads ?? [];
@@ -248,11 +245,6 @@ export function createConstraintPanel(react, { Dialog }) {
                   ],
             ),
           ),
-          h(
-            'p',
-            { className: 'wf-note' },
-            `${rules.filter((rule) => rule.enabled !== false).length}条启用；具体月份的应用结果及缺项见下方。`,
-          ),
         ),
         h(
           'div',
@@ -343,17 +335,12 @@ export function createConstraintPanel(react, { Dialog }) {
                 }),
               )
             : h('p', { className: 'wf-note' }, '暂无冲突或建议'),
-          h(
-            'span',
-            { className: 'wf-note' },
-            conflicts.length ? `${conflicts.length}项冲突、建议或待补输入` : '无待处理项',
-          ),
         ),
       (draft.constraints?.rules?.history?.length ?? 0) > 0 &&
         h(
           'details',
           {
-            className: 'dc-card wf-advanced',
+            className: 'dc-card wf-advanced mps-report-details',
             open: historyOpen,
             onToggle: (event) => {
               if (event.target === event.currentTarget) setHistoryOpen(event.currentTarget.open);
@@ -372,7 +359,7 @@ export function createConstraintPanel(react, { Dialog }) {
       h(
         'details',
         {
-          className: 'dc-card wf-advanced',
+          className: 'dc-card wf-advanced mps-report-details',
           open: advancedOpen,
           onToggle: (event) => {
             if (event.target === event.currentTarget) setAdvancedOpen(event.currentTarget.open);
@@ -503,11 +490,6 @@ export function createConstraintPanel(react, { Dialog }) {
                 'fieldset',
                 { className: 'wf-rule-evidence' },
                 h('legend', null, '方案核对输入'),
-                h(
-                  'p',
-                  { className: 'wf-note' },
-                  '按当前规则作用对象填写每月方案值及来源。缺值不判定通过；此处不会自动生成调拨、外协或开工方案。',
-                ),
                 ...result.months.slice(0, 3).map((month) => {
                   const entry = editor.rule.observations?.find((row) => row.month === month);
                   const set = (changes) =>
@@ -558,11 +540,6 @@ export function createConstraintPanel(react, { Dialog }) {
                 }),
               ),
             error && h('p', { role: 'alert' }, error),
-            h(
-              'p',
-              { className: 'wf-note' },
-              '缺参数可保存草稿，但不会参与计算。调拨、成本与新品提前期需对应方案数据，缺输入时显示待校验。',
-            ),
           ),
         ),
       proposal &&

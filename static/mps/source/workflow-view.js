@@ -1,3 +1,11 @@
+import { createCalculationHelp } from './calculation-help.js';
+import {
+  compareBusinessRows,
+  compareBusinessValues,
+  orderedTableEntries,
+  createTablePresentation,
+  isSkuColumn,
+} from './table-presentation.js';
 import {
   createDelistedReport,
   delistedDownloadColumns,
@@ -11,7 +19,7 @@ import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import { demandBasisLabel } from './festival-demand.js';
 import { matchesQuantityAdjustment } from './local-draft.js';
-import { createReportPage } from './report-page.js';
+import { createReportPage, renderTableFooter } from './report-page.js';
 import {
   createInventoryTargetPanel,
   inventoryDependencyColumns,
@@ -22,7 +30,12 @@ import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createPoolExceptionReport } from './pool-exception-view.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
 import { call } from '../../../business/shared/channel.js';
-import { readUnitWeights, unitWeightCandidate, productWeightCandidate } from './unit-weights.js';
+import {
+  hasUnitWeightOverride,
+  readUnitWeights,
+  unitWeightCandidate,
+  productWeightCandidate,
+} from './unit-weights.js';
 import {
   createEvaluationOverview,
   planContext,
@@ -30,6 +43,7 @@ import {
 } from './evaluation-view.js';
 import { readPlanRelations } from './relations.js';
 import { computeWorkflow } from './workflow-worker-client.js';
+import { evaluationInputs } from './evaluation-storage.js';
 import { readCapacityAnnual } from './master-data.js';
 import { readEvaluationInventory } from './facts.js';
 import { capacityFiscalMonths } from 'dsh-agent-manage/mps-compute/capacity-report';
@@ -121,19 +135,20 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 export function createWorkflow(
   react,
   useMpsPart,
-  { downloadCsv, downloadAmounts, Dialog, Upload, parseCsv },
+  { downloadCsv, downloadAmounts, Dialog, Upload, parseCsv, createPortal },
 ) {
   const h = react.createElement;
+  const CalculationHelp = createCalculationHelp(react);
   const ShipmentScopeNotice = createShipmentScopeNotice(react, { downloadCsv });
-  const { useBatchEdit, Actions, Field } = createBatchEdit(react);
-  const NumberInput = ({ batch, label, value, commit, max }) =>
+  const { useBatchEdit, Actions, Field } = createBatchEdit(react, createPortal);
+  const NumberInput = ({ batch, label, value, commit, max, placeholder = '未填写' }) =>
     h(Field, {
       batch,
       id: label,
       label,
       value,
       max,
-      placeholder: '未填写',
+      placeholder,
       onStage: commit,
     });
   const ProcessedDemand = createProcessedDemand(react, {
@@ -147,7 +162,7 @@ export function createWorkflow(
   const DelistedReport = createDelistedReport(react, { downloadCsv });
   const PoolExceptionReport = createPoolExceptionReport(react, { downloadCsv });
   const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
-  const InventoryTargetPanel = createInventoryTargetPanel(react, { downloadCsv, NumberInput });
+  const InventoryTargetPanel = createInventoryTargetPanel(react, { NumberInput });
   const ConstraintPanel = createConstraintPanel(react, { Dialog });
   const EvaluationOverview = createEvaluationOverview(react, { downloadCsv, Dialog });
   return function Workflow({
@@ -155,6 +170,8 @@ export function createWorkflow(
     result,
     evaluation,
     setEvaluation,
+    evaluationStorageError,
+    evaluationLoading,
     step,
     draft: savedDraft,
     scopeGeneration,
@@ -165,24 +182,28 @@ export function createWorkflow(
     shipmentSnapshot,
     onUndoShareAdjustment,
     onEditingChange,
+    adjustmentActionsTarget,
     selectedCategories = [],
+    stepViews,
+    processBatch,
   }) {
     const viewScope = JSON.stringify([savedDraft.id, savedDraft.month, scopeGeneration]);
-    const stepViews = react.useRef({ scope: viewScope, views: new Map() });
-    if (stepViews.current.scope !== viewScope)
-      stepViews.current = { scope: viewScope, views: new Map() };
-    if (!stepViews.current.views.has(step))
-      stepViews.current.views.set(step, createStepViewState());
-    const view = stepViews.current.views.get(step);
+    const fallbackViews = react.useRef({ scope: viewScope, views: new Map() });
+    if (fallbackViews.current.scope !== viewScope)
+      fallbackViews.current = { scope: viewScope, views: new Map() };
+    stepViews ??= fallbackViews.current.views;
+    if (!stepViews.has(step)) stepViews.set(step, createStepViewState());
+    const view = stepViews.get(step);
     const [search, setSearch] = useStepViewField(react, view, 'search', '');
     const [configuration, setConfiguration] = react.useState({});
-    const batch = useBatchEdit({
+    const configurationBatch = useBatchEdit({
       scope: `${savedDraft.id}:${savedDraft.month}:${step}:${scopeGeneration}`,
-      onEditingChange,
+      onEditingChange: step === 'process' ? undefined : onEditingChange,
       requireReason: step === 'process',
       onStart: () => setConfiguration({}),
       onCancel: () => setConfiguration({}),
     });
+    const batch = step === 'process' && processBatch ? processBatch : configurationBatch;
     const draft =
       step === 'constraints' && batch.active ? { ...savedDraft, ...configuration } : savedDraft;
     const update = (changes) => {
@@ -303,12 +324,18 @@ export function createWorkflow(
       evaluation?.draft.id === draft.id && evaluation.scopeGeneration === scopeGeneration
         ? evaluation
         : null;
-    const evaluationStale = Boolean(
-      currentEvaluation &&
-      (currentEvaluation.draft !== savedDraft ||
-        currentEvaluation.relations !== relations ||
-        currentEvaluation.shipmentSnapshot !== shipmentSnapshot ||
-        (weightRead && weightRead !== currentEvaluation.weights)),
+    const evaluationStale = react.useMemo(
+      () =>
+        Boolean(
+          currentEvaluation &&
+          (currentEvaluation.restored
+            ? currentEvaluation.inputs !== evaluationInputs(savedDraft)
+            : currentEvaluation.draft !== savedDraft ||
+              currentEvaluation.relations !== relations ||
+              currentEvaluation.shipmentSnapshot !== shipmentSnapshot ||
+              (weightRead && weightRead !== currentEvaluation.weights)),
+        ),
+      [currentEvaluation, savedDraft, relations, shipmentSnapshot, weightRead],
     );
     const executeEvaluation = async () => {
       const ticket = ++executionGeneration.current;
@@ -407,7 +434,7 @@ export function createWorkflow(
           controller.signal,
         );
         if (ticket !== executionGeneration.current) return;
-        setEvaluation({
+        await setEvaluation({
           draft,
           relations,
           shipmentSnapshot,
@@ -427,10 +454,11 @@ export function createWorkflow(
     };
     const viewCategories = ['process', 'constraints'].includes(step) ? selectedCategories : [];
     const fields = step === 'process' ? processFields : planFields;
-    const scopedRows =
+    const scopedRows = (
       step === 'process'
         ? [...result.rows, ...(result.referenceRows ?? [])].filter((row) => row.base !== 'ODM')
-        : result.rows;
+        : result.rows
+    ).toSorted(compareBusinessRows);
     const scopedCategories = result.categoryRows;
     const products = sourceProductMappings(draft.products, draft.productRaw);
     const inScope = createProductScopeMatcher(products);
@@ -449,7 +477,7 @@ export function createWorkflow(
             })),
         ].map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
-    ];
+    ].sort(compareBusinessRows);
     const bases = [
       ...new Set(
         [
@@ -464,8 +492,10 @@ export function createWorkflow(
               ]),
         ].filter((base) => admittedBases.has(base)),
       ),
-    ];
-    const categories = [...new Set(scopedCategories.map((row) => row.category))];
+    ].sort((left, right) => compareBusinessValues('base', left, right));
+    const categories = [...new Set(scopedCategories.map((row) => row.category))].sort(
+      (left, right) => compareBusinessValues('category', left, right),
+    );
     const filtered = scopedRows.filter(
       (row) =>
         (!base || row.base === base) &&
@@ -531,10 +561,26 @@ export function createWorkflow(
       titles[step],
       active,
     );
-    const table = (name, columns, rows, renderDetail) =>
+    const table = (name, columns, rows, renderDetail, footer) =>
       h(
         'div',
-        { className: 'dc-table-scroll wf-table-scroll', tabIndex: 0 },
+        {
+          className: 'dc-table-scroll wf-table-scroll',
+          tabIndex: 0,
+          role: 'region',
+          'aria-label': `${name}滚动区`,
+          ref: (element) => {
+            if (element) {
+              element.scrollLeft = view.get()[`${name}.scrollLeft`] ?? 0;
+              element.scrollTop = view.get()[`${name}.scrollTop`] ?? 0;
+            }
+          },
+          onScroll: (event) =>
+            view.update({
+              [`${name}.scrollLeft`]: event.currentTarget.scrollLeft,
+              [`${name}.scrollTop`]: event.currentTarget.scrollTop,
+            }),
+        },
         h(
           'table',
           { 'aria-label': name },
@@ -551,31 +597,52 @@ export function createWorkflow(
             'tbody',
             null,
             rows.length
-              ? rows.map((cells, index) =>
+              ? orderedTableEntries(columns, rows).map(({ row: cells, index }) =>
                   h(
                     react.Fragment,
                     { key: index },
                     h(
                       'tr',
                       {},
-                      cells.map((cell, position) => h('td', { key: position }, cell)),
+                      cells.map((cell, position) =>
+                        h(
+                          'td',
+                          { key: position },
+                          isSkuColumn(columns[position]) && typeof cell === 'string' && cell
+                            ? h(createTablePresentation(react).Code, {
+                                row: {
+                                  base,
+                                  ...Object.fromEntries(
+                                    columns.map((column, index) => [column, cells[index]]),
+                                  ),
+                                },
+                              })
+                            : cell,
+                        ),
+                      ),
                     ),
                     renderDetail?.(cells, index),
                   ),
                 )
-              : h(
-                  'tr',
-                  null,
-                  h('td', { colSpan: columns.length, className: 'wf-empty' }, '暂无记录 · 未评估'),
-                ),
+              : !footer &&
+                  h(
+                    'tr',
+                    null,
+                    h(
+                      'td',
+                      { colSpan: columns.length, className: 'wf-empty' },
+                      '暂无记录 · 未评估',
+                    ),
+                  ),
           ),
+          renderTableFooter(h, columns, footer),
         ),
       );
     const card = (name, body, actions) =>
       h(
         'section',
         { className: 'dc-card', 'aria-label': name },
-        h('div', { className: 'dc-card-head' }, h('h3', null, name), actions),
+        h('div', { className: 'dc-card-head mps-report-heading' }, h('h3', null, name), actions),
         body,
       );
     const select = (label, value, values, setter) =>
@@ -641,6 +708,8 @@ export function createWorkflow(
             ? '整类提报合计为0，本类完全按历史占比拆分。'
             : '系统拆分以销售提报占比和上一财年发货占比各占一半。';
         expression += `数量来源：评估月份${draft.month}销售提报，${history.start.slice(0, 7)}至${history.end.slice(0, 7)}实际发货。`;
+        if (row.historyCode)
+          expression += `历史发货含替换品 ${row.historyCode}，折算倍率${row.historyFactor === null ? '待补' : percent(row.historyFactor ?? 1)}。`;
         if (category) {
           const index = result.months.indexOf(row.month);
           expression += `大类需求采用${index < 2 ? '三年历史平均' : '年度需求'}环比倍率${percent(category.chain)}${category.chain == null ? '' : `，对应环比增长率${percent(category.chain - 1)}`}及同期平均占比${percent(category.share)}。同比未参与本次大类需求计算。`;
@@ -674,7 +743,7 @@ export function createWorkflow(
       if (field === 'targetInventory' && row.safetyDays === 0)
         expression =
           row.safetyDaysSource === 'missing-turnover-days-zero'
-            ? '源目标周转天数待补，本轮临时按0天计算，目标库存为0；源缺项保留，补齐后重新评估'
+            ? '源目标周转天数待补，默认按0天计算，目标库存为0；补齐后重新评估'
             : '安全天数明确为0，目标库存为0，无需下一月需求';
       if (field === 'requiredProduction')
         expression = `需求${value(row.demand)}件，期初库存${value(row.openingInventory)}件，需保留目标库存${value(row.targetInventory)}件。本期需补充生产${value(row.requiredProduction)}件，库存已能覆盖需求和目标库存时无需补充生产，仅供需求推导参考`;
@@ -748,7 +817,7 @@ export function createWorkflow(
       row.gapTons,
       resourceStatus[row.status] ?? '未评估',
     ];
-    const exportRows = (name, exportFields, includeCategory = false) => {
+    const workflowExport = (exportFields, includeCategory = false) => {
       const shipmentByProduct = new Map(
         (result.comparisonSources?.shipment ?? []).map((row) => [
           JSON.stringify([row['基地'], row['产品编码']]),
@@ -789,7 +858,6 @@ export function createWorkflow(
           '历史合计数量',
           '替换系数',
           '历史参考口径',
-          '公式说明',
           ...inventoryDependencyColumns,
           'Top1托底',
           '提报数量口径',
@@ -869,7 +937,6 @@ export function createWorkflow(
             row.historyCode && row.historyCode !== row.code
               ? '同基地自身历史＋替换品历史×替换系数；同码一次、不递归'
               : '自身历史，同码只计一次',
-          公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；参考期末=期初+所需生产-需求`,
           ...inventoryDependencyFields(row),
           系统SKU需求: row.systemDemand,
           ...delistedDownloadFields(row),
@@ -1049,7 +1116,7 @@ export function createWorkflow(
               未评估原因: reason,
             })),
         );
-      downloadCsv(`${draft.month}-${name}.csv`, columns, rows);
+      return { columns, rows };
     };
     const filterBar = h(
       'div',
@@ -1120,13 +1187,14 @@ export function createWorkflow(
         return rowId;
       }
     };
-    const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER) =>
+    const numberInput = (label, value, change, max = Number.MAX_SAFE_INTEGER, placeholder) =>
       h(NumberInput, {
         batch,
         key: `${draft.id}-${label}`,
         label,
         value,
         max,
+        placeholder,
         commit: (text) => change(text === '' ? null : text),
       });
     const productionDays = draft.productionDays ?? [];
@@ -1187,7 +1255,10 @@ export function createWorkflow(
           ]),
       );
     const renderWeightRow = (row) => {
-      const current = weights.find((item) => item.base === row.base && item.code === row.code);
+      const isRow = (item) => item.base === row.base && item.code === row.code;
+      const matching = weights.filter(isRow);
+      const override = matching.find((item) => hasUnitWeightOverride(item.tonsPerPiece));
+      const current = override ?? matching[0];
       const productWeight = productWeightCandidate(
         (draft.productRaw ?? []).filter((product) => product.material_code === row.code),
         row.base,
@@ -1198,25 +1269,46 @@ export function createWorkflow(
         row.code,
         current?.channels ?? '',
       );
-      const setWeight = (patch) =>
+      const automaticWeight = override ? null : (productWeight?.tonsPerPiece ?? null);
+      let weightStatus =
+        candidate.missing.join('；') || '适用渠道已填写，尚未采用来源值；可按确认净重手工维护';
+      if (override?.source)
+        weightStatus = `已按适用渠道采用；读取配置 ${override.source.configVersion}；${override.source.readAt}`;
+      else if (productWeight)
+        weightStatus = override
+          ? '已填写人工系数'
+          : productWeight.missing.join('；') || '自动采用产品清单';
+      const setWeight = (patch) => {
+        const next = {
+          base: row.base,
+          code: row.code,
+          tonsPerPiece: override?.tonsPerPiece ?? null,
+          channels: current?.channels ?? '',
+          ...patch,
+        };
         update({
           unitWeights: [
-            ...weights.filter((item) => item.base !== row.base || item.code !== row.code),
-            {
-              base: row.base,
-              code: row.code,
-              tonsPerPiece: current?.tonsPerPiece ?? null,
-              channels: current?.channels ?? '',
-              ...patch,
-            },
+            ...weights.filter((item) => !isRow(item)),
+            ...(hasUnitWeightOverride(next.tonsPerPiece) || next.channels.trim() ? [next] : []),
           ],
         });
+      };
       return [
         row.base,
         row.code,
         row.name,
-        numberInput(`${row.base} ${row.code} 件吨系数`, current?.tonsPerPiece, (tonsPerPiece) =>
-          setWeight({ tonsPerPiece }),
+        h(
+          'div',
+          null,
+          numberInput(
+            `${row.base} ${row.code} 件吨系数`,
+            override?.tonsPerPiece ?? (batch.active ? null : automaticWeight),
+            (tonsPerPiece) => setWeight({ tonsPerPiece }),
+            undefined,
+            automaticWeight === null ? undefined : '可填人工值',
+          ),
+          automaticWeight !== null &&
+            h('div', null, batch.active ? `自动采用 ${automaticWeight}` : '自动采用'),
         ),
         h('input', {
           'aria-label': `${row.base} ${row.code} 适用渠道`,
@@ -1226,7 +1318,7 @@ export function createWorkflow(
           onChange: (event) =>
             setWeight({
               channels: event.target.value,
-              tonsPerPiece: current?.source ? null : (current?.tonsPerPiece ?? null),
+              tonsPerPiece: override?.source ? null : (override?.tonsPerPiece ?? null),
             }),
         }),
         h(
@@ -1259,14 +1351,7 @@ export function createWorkflow(
           },
           '使用来源系数',
         ),
-        h(
-          'span',
-          null,
-          current?.source
-            ? `已按适用渠道采用；读取配置 ${current.source.configVersion}；${current.source.readAt}`
-            : candidate.missing.join('；') ||
-                '适用渠道已填写，尚未采用来源值；可按确认净重手工维护',
-        ),
+        h('span', null, weightStatus),
       ];
     };
     const inputGaps = [
@@ -1571,7 +1656,6 @@ export function createWorkflow(
       'limitationsOpen',
       false,
     );
-    const localRules = draft.constraints?.rules?.local ?? result.constraints.rules.local ?? [];
     const exceptionFilters = { base, category, categories: viewCategories, month, search };
     return h(
       'section',
@@ -1581,32 +1665,33 @@ export function createWorkflow(
         'aria-label': titles[step],
         onKeyDown: batch.keyDown,
       },
-      h(
-        'div',
-        { className: 'wf-toolbar' },
-        step !== 'constraints' && filterBar,
-        h(
-          'div',
-          { className: 'wf-toolbar-actions' },
-          step === 'process' &&
-            h(
-              react.Fragment,
-              null,
-              h('span', { className: 'dc-card-note' }, '按当前筛选范围下载'),
+      step === 'constraints'
+        ? h(Actions, {
+            container: adjustmentActionsTarget,
+            batch,
+            hint: '',
+          })
+        : h(
+            'div',
+            { className: 'wf-toolbar' },
+            filterBar,
+            step === 'process' &&
               h(
-                'button',
-                { onClick: () => exportRows('需求拆分', processFields, true) },
-                '下载需求拆分',
+                'div',
+                { className: 'wf-toolbar-actions' },
+                h(
+                  'button',
+                  {
+                    className: 'mps-download',
+                    onClick: () => {
+                      const { columns, rows } = workflowExport(processFields, true);
+                      return downloadCsv(`${draft.month}-需求拆分.csv`, columns, rows);
+                    },
+                  },
+                  '下载需求拆分',
+                ),
               ),
-            ),
-          ['process', 'constraints'].includes(step) &&
-            h(Actions, {
-              batch,
-              requireReason: step === 'process',
-              hint: step === 'constraints' ? '' : '留空恢复系统值',
-            }),
-        ),
-      ),
+          ),
       step !== 'constraints' &&
         result.scopeCoverage !== 'national' &&
         h(
@@ -1614,7 +1699,7 @@ export function createWorkflow(
           {
             className: 'wf-pool-note',
           },
-          '产品池全国覆盖尚未取得实际证明，仅报告范围内结果',
+          '按当前产品池汇总',
         ),
       step !== 'process' &&
         h(ShipmentScopeNotice, {
@@ -1683,7 +1768,7 @@ export function createWorkflow(
             h(
               'details',
               {
-                className: 'wf-disclosure',
+                className: 'wf-disclosure mps-report-details',
                 open: diagnosticsOpen,
                 onToggle: (event) => {
                   if (event.target === event.currentTarget)
@@ -1765,11 +1850,6 @@ export function createWorkflow(
                   react.Fragment,
                   null,
                   h(
-                    'p',
-                    { className: 'wf-note' },
-                    '按月份、基地及SKU确认已经存在的生产入库、在途和调拨计划。空白待补，明确0表示已确认无计划；填写来源和原因后保存。本页不创建生产或采购单。前月已计变动由期初承接，不重复登记。',
-                  ),
-                  h(
                     ReportPage,
                     {
                       view,
@@ -1801,6 +1881,15 @@ export function createWorkflow(
                       ),
                   ),
                 ),
+                h(
+                  CalculationHelp,
+                  { title: '既有库存变动 · 口径说明' },
+                  h(
+                    'p',
+                    null,
+                    '按评估月份采用已取得的生产入库、在途和调拨数量，未取得的变动量按 0 计。前月变动通过月末结存转入下月期初。',
+                  ),
+                ),
               ),
               card(
                 '可用生产天数',
@@ -1816,11 +1905,6 @@ export function createWorkflow(
                   react.Fragment,
                   null,
                   h(
-                    'p',
-                    { className: 'wf-note' },
-                    '人工值优先；未设人工值时，按最新产品清单的同基地SKU净重、重量单位与计量单位自动换算吨数。产品源有缺值或冲突时待补，不改用旧值。无该基地SKU记录时使用旧渠道系数；相关渠道均有正数且相同系数才可采用，不从产能比推算。',
-                  ),
-                  h(
                     'button',
                     {
                       onClick: () => syncWeights(),
@@ -1834,14 +1918,19 @@ export function createWorkflow(
                   weightError && h('p', { role: 'alert' }, weightError),
                   weightRead &&
                     h(
-                      'p',
-                      { className: 'wf-note' },
-                      `已完整读取${weightRead.codes.length}个产品编码、${weightRead.rows.length}条渠道系数来源；读取配置${weightRead.configVersion}，${weightRead.readAt}。这不是主数据生效版本或全渠道覆盖证明。`,
+                      CalculationHelp,
+                      { title: '件吨系数 · 口径说明' },
+                      h(
+                        'p',
+                        null,
+                        `已读取${weightRead.codes.length}个产品编码、${weightRead.rows.length}条系数。配置 ${weightRead.configVersion} · ${weightRead.readAt}`,
+                      ),
                     ),
                   weightRead &&
                     h(
                       'button',
                       {
+                        className: 'mps-download',
                         onClick: () =>
                           downloadCsv(
                             `${draft.month}-件吨系数来源.csv`,
@@ -1903,11 +1992,6 @@ export function createWorkflow(
                 h(
                   react.Fragment,
                   null,
-                  h(
-                    'p',
-                    { className: 'wf-note' },
-                    '每个实际使用的产能资源只登记一个唯一编号，不按SKU重复累计。未使用的设备无需补配。濮阳合并与8:2外协尚无完整映射，暂不折入可用能力。',
-                  ),
                   table(
                     '产能资源配置',
                     ['唯一编号', '基地', '类型', '名称', '日产吨数', '操作'],
@@ -1934,11 +2018,6 @@ export function createWorkflow(
                 h(
                   react.Fragment,
                   null,
-                  h(
-                    'p',
-                    { className: 'wf-note' },
-                    '本地分配用于显式维护的资源评估，按基地、SKU、月份校验份额。实际排产使用已读取的隧道承接关系及产能上限，不将未使用的资源类型作为必填项。',
-                  ),
                   table(
                     '资源分配配置',
                     ['月份', '基地', '产品编码', '资源', '分配比例', '操作'],
@@ -1987,114 +2066,6 @@ export function createWorkflow(
                 ),
                 h('button', { disabled: true }, '保存正式配置'),
               ),
-              h(
-                'button',
-                {
-                  onClick: () =>
-                    downloadCsv(
-                      `${draft.month}-本地约束.csv`,
-                      [
-                        '评估版本',
-                        '评估月份',
-                        '基地',
-                        '安全天数',
-                        '约束内容',
-                        '作用对象',
-                        '强度',
-                        '生效至',
-                        '来源',
-                        '状态',
-                        '配置类型',
-                        '月份',
-                        '产品编码',
-                        '生产天数',
-                        '件吨系数',
-                        '资源编号',
-                        '资源类型',
-                        '资源名称',
-                        '日产吨数',
-                        '分配比例',
-                        '适用渠道',
-                        '读取配置版本',
-                        '读取时间',
-                      ],
-                      [
-                        ...result.constraints.safetyDays.map((row) => ({
-                          评估版本: draft.name,
-                          评估月份: draft.month,
-                          基地: row.base,
-                          安全天数: row.days,
-                          来源: '本地隔离草稿',
-                        })),
-                        ...productionDays.map((row) => ({
-                          评估版本: draft.name,
-                          评估月份: draft.month,
-                          配置类型: '生产天数',
-                          基地: row.base,
-                          月份: row.month,
-                          生产天数: row.days,
-                        })),
-                        ...weights
-                          .filter((row) => inScope(row.base, row.code))
-                          .map((row) => ({
-                            评估版本: draft.name,
-                            评估月份: draft.month,
-                            配置类型: '件吨系数',
-                            基地: row.base,
-                            产品编码: row.code,
-                            件吨系数: row.tonsPerPiece,
-                            适用渠道: row.channels,
-                            读取配置版本: row.source?.configVersion,
-                            读取时间: row.source?.readAt,
-                          })),
-                        ...resources.map((row) => ({
-                          评估版本: draft.name,
-                          评估月份: draft.month,
-                          配置类型: '产能资源',
-                          基地: row.base,
-                          资源编号: row.id,
-                          资源类型: row.kind,
-                          资源名称: row.name,
-                          日产吨数: row.dailyTons,
-                        })),
-                        ...assignments
-                          .filter((row) => inScope(row.base, row.code))
-                          .map((row) => ({
-                            评估版本: draft.name,
-                            评估月份: draft.month,
-                            配置类型: '资源分配',
-                            月份: row.month,
-                            基地: row.base,
-                            产品编码: row.code,
-                            资源编号: row.resourceId,
-                            分配比例: row.share,
-                          })),
-                        ...inputGaps.map(([item, reason]) => ({
-                          评估版本: draft.name,
-                          评估月份: draft.month,
-                          配置类型: '实际输入缺项',
-                          来源: item,
-                          状态: reason,
-                        })),
-                        ...localRules.map((rule) => ({
-                          评估版本: draft.name,
-                          评估月份: draft.month,
-                          约束内容: rule.description,
-                          作用对象: rule.target,
-                          强度: rule.strength,
-                          生效至: rule.until,
-                          来源: '本地隔离草稿',
-                          状态:
-                            (result.ruleEvaluations ?? [])
-                              .filter((entry) => entry.ruleId === rule.id)
-                              .map((entry) => `${entry.month} ${entry.status}: ${entry.reason}`)
-                              .join('；') || '待完善规则参数',
-                        })),
-                      ],
-                    ),
-                },
-                '下载本地配置',
-              ),
             )
           : h(
               react.Fragment,
@@ -2105,25 +2076,19 @@ export function createWorkflow(
                 step,
                 draft,
                 currentEvaluation,
+                storageError: evaluationStorageError,
+                loadingSavedResult: evaluationLoading,
                 stale: evaluationStale,
                 executing,
                 preparingInputs,
                 error: evaluationError,
                 onExecute: executeEvaluation,
+                getReferenceSheet: () => ({ name: '需求推导参考', ...workflowExport(planFields) }),
                 filters: { base, month, category, categories: viewCategories, search, onlyMissing },
                 table,
                 card,
                 numberText,
               }),
-              h(
-                'div',
-                { className: 'wf-actions' },
-                h(
-                  'button',
-                  { onClick: () => exportRows('需求推导参考', planFields) },
-                  '下载需求推导参考',
-                ),
-              ),
             ),
       step === 'report' &&
         h(PoolExceptionReport, {
@@ -2144,7 +2109,7 @@ export function createWorkflow(
         ? h(
             'details',
             {
-              className: 'wf-limitations',
+              className: 'wf-limitations mps-report-details',
               role: 'status',
               open: limitationsOpen,
               onToggle: (event) => {
@@ -2152,7 +2117,7 @@ export function createWorkflow(
                   setLimitationsOpen(event.currentTarget.open);
               },
             },
-            h('summary', null, `计算说明与缺项 · ${result.missing.length}条`),
+            h('summary', null, `计算缺项 · ${result.missing.length}条`),
             h(
               'ul',
               null,
@@ -2174,8 +2139,6 @@ export function createWorkflow(
           }),
           h(DelistedReport, { draft, result, filters: exceptionFilters, table, collapsible: true }),
         ),
-      step === 'report' &&
-        h('div', { className: 'wf-actions' }, h('button', { disabled: true }, '保存正式报告')),
       formula
         ? h(
             Dialog,

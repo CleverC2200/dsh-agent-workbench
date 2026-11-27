@@ -26,7 +26,8 @@ const zeroSource = (base) => ({
   missing_turnover_days_rows: 0,
 });
 let exportIndex = 0;
-async function downloadRows(page, view, name) {
+async function downloadRows(page, view, sheet) {
+  const name = '下载目标库存';
   const pointer = process.env.MPS_TURNOVER_POINTER === '1';
   const button = view.getByRole('button', { name, exact: true });
   exportIndex++;
@@ -65,24 +66,28 @@ async function downloadRows(page, view, name) {
   }
   if (process.env.MPS_TURNOVER_EXPORT_DIR)
     await file.saveAs(`${process.env.MPS_TURNOVER_EXPORT_DIR}/${exportIndex}-${name}.csv`);
-  const csv = await mpsDownloadText(await file.path());
+  const csv = await mpsDownloadText(await file.path(), sheet);
   const book = XLSX.read(csv.replace(/^\uFEFF/, ''), { type: 'string', raw: true });
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
-test('周转报告区分有效零、缺失待补和人工补充，筛选后下载与目标库存同步', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, ({ queryId }) => ({
-    rows: queryId.endsWith('.count')
-      ? [{ total: queryId.startsWith('inventory-targets.') ? 2 : 0 }]
-      : queryId.startsWith('inventory-targets.')
-        ? [
-            zeroSource('甲'),
-            { ...zeroSource('乙'), inventory_version: '滚动', final_target_turnover_days: 10 },
-          ]
-        : [],
-    returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
-    configVersion: 'turnover-report-fixture',
-  }));
+test('周转报告区分有效零、缺失默认零和人工补充，筛选后下载与目标库存同步', async (t) => {
+  let holdTargets;
+  const { page, frame, calls } = await mpsPage(t, config, async ({ queryId }) => {
+    if (queryId.startsWith('inventory-targets.')) await holdTargets;
+    return {
+      rows: queryId.endsWith('.count')
+        ? [{ total: queryId.startsWith('inventory-targets.') ? 2 : 0 }]
+        : queryId.startsWith('inventory-targets.')
+          ? [
+              zeroSource('甲'),
+              { ...zeroSource('乙'), inventory_version: '滚动', final_target_turnover_days: 10 },
+            ]
+          : [],
+      returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
+      configVersion: 'turnover-report-fixture',
+    };
+  });
   await page.clock.install({ time: new Date('2026-11-21T12:00:00+08:00') });
   await frame.getByLabel('评估月份选择', { exact: true }).selectOption('2026-12');
   await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
@@ -127,6 +132,28 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
   await expect(report).toContainText('周转天数待补');
   await expect(report).toContainText('缺目标记录');
   await expect(report).toContainText('周转天数版本回退');
+  const targetRead = Promise.withResolvers();
+  holdTargets = targetRead.promise;
+  try {
+    await view.getByRole('button', { name: '同步目标库存', exact: true }).click();
+    await expect(view.getByText('正在读取目标库存', { exact: true })).toBeVisible();
+    await expect(report).toHaveCount(0);
+    await expect(view.getByRole('table', { name: '目标周转天数待补', exact: true })).toHaveCount(0);
+  } finally {
+    targetRead.resolve();
+  }
+  const target = view.getByRole('region', { name: '基地与单品目标库存', exact: true });
+  const pendingStatus = target.getByRole('status');
+  await expect(pendingStatus).toHaveText('周转天数待补 1 项');
+  await expect(view.getByRole('button', { name: '下载本地配置', exact: true })).toHaveCount(0);
+  const help = target.locator('.dc-calculation-help-panel');
+  await expect(help).toBeHidden();
+  const openHelp = target.getByRole('button', { name: '口径说明', exact: true });
+  await openHelp.click();
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('安全天数来源月2026-12');
+  await openHelp.press('Escape');
+  await expect(report).toContainText('有效零周转天数');
   assert.ok(
     calls
       .filter((call) => call.queryId.startsWith('inventory-targets.'))
@@ -135,60 +162,76 @@ test('周转报告区分有效零、缺失待补和人工补充，筛选后下�
           call.parameters.start_month === '2026-12' && call.parameters.end_month === '2026-12',
       ),
   );
-  await expect(view).not.toContainText('临时按0天');
+  await expect(report).toContainText('默认按0天计算');
   await expect(view.getByRole('table', { name: '基地安全天数策略', exact: true })).toHaveCount(0);
-  let rows = await downloadRows(page, view, '下载周转天数报告');
+  let rows = await downloadRows(page, view, '当前筛选');
   assert.equal(rows.length, 3);
   const zero = rows.find((row) => row['基地'] === '甲' && row['产品编码'] === 'A');
-  assert.equal(zero['原始周转天数'], '0');
-  assert.equal(zero['计算用周转天数'], '0');
+  assert.deepEqual(Object.keys(zero), [
+    '评估版本',
+    '月份',
+    '基地',
+    '产品编码',
+    '产品名称',
+    '有效周转天数',
+    '天数来源',
+    '周转天数来源月',
+    '周转天数来源版本',
+    '目标期末库存',
+    '核对事项',
+  ]);
+  assert.equal(zero['有效周转天数'], '0');
   assert.equal(zero['目标期末库存'], '0');
-  assert.match(zero['来源'], /源最终目标周转天数.*2026-12.*月初/);
-  assert.match(zero['计算依据'], /0天.*目标库存为0.*预测期末库存.*库存收支/);
+  assert.equal(zero['天数来源'], '源最终目标周转天数');
+  assert.equal(zero['核对事项'], '');
   const fallback = rows.find((row) => row['基地'] === '乙');
-  assert.equal(fallback['来源月'], '2026-12');
-  assert.equal(fallback['来源版本'], '滚动');
-  assert.match(fallback['回退原因'], /月初.*缺目标记录/);
-  assert.equal(fallback['下月有效需求'], '10');
+  assert.equal(fallback['周转天数来源月'], '2026-12');
+  assert.equal(fallback['周转天数来源版本'], '滚动');
+  assert.match(fallback['核对事项'], /月初.*缺目标记录/);
+  assert.doesNotMatch(fallback['核对事项'], /请核对或人工补充/);
   assert.ok(Math.abs(Number(fallback['目标期末库存']) - 100 / 31) < 1e-8);
-  const sources = await downloadRows(page, view, '下载完整目标源记录');
-  assert.ok(sources.every((row) => row['安全天数使用状态'] === '已采用该基地SKU的来源月及版本'));
+  const sources = await downloadRows(page, view, '目标源记录');
+  assert.ok(sources.every((row) => row['是否采用周转天数'] === '是'));
+  const summary = await downloadRows(page, view, '三个月库存汇总');
+  assert.equal(summary.length, 6);
+  const firstMonth = summary.find((row) => row['基地'] === '甲' && row['月份'] === '2026-12');
+  assert.equal(firstMonth['目标库存已知小计（件）'], '0');
+  assert.equal(firstMonth['待补目标库存SKU数'], '0');
   await view.getByLabel('目标明细基地', { exact: true }).selectOption('甲');
   await view.getByLabel('搜索目标单品', { exact: true }).fill('B');
-  rows = await downloadRows(page, view, '下载周转天数报告');
+  rows = await downloadRows(page, view, '当前筛选');
   assert.equal(rows.length, 1);
   assert.equal(rows[0]['基地'], '甲');
   assert.equal(rows[0]['产品编码'], 'B');
   assert.equal(rows[0]['月份'], '2026-12');
-  assert.equal(rows[0]['异常类别'], '周转天数待补');
-  assert.equal(rows[0]['目标期末库存'], '');
+  assert.match(rows[0]['核对事项'], /缺目标记录/);
+  assert.doesNotMatch(rows[0]['核对事项'], /请核对或人工补充/);
+  assert.equal(rows[0]['有效周转天数'], '0');
+  assert.equal(rows[0]['目标期末库存'], '0');
+  assert.equal(rows[0]['天数来源'], '缺输入，默认0天');
   await commitNumber(view.getByLabel('甲 B 补充目标周转天数', { exact: true }), '15');
   await expect(report).toContainText('周转天数人工补充');
-  rows = await downloadRows(page, view, '下载周转天数报告');
+  await expect(pendingStatus).toBeEmpty();
+  rows = await downloadRows(page, view, '当前筛选');
   assert.equal(rows.length, 1);
-  assert.equal(rows[0]['计算用周转天数'], '15');
-  assert.equal(rows[0]['人工补充天数'], '15');
-  assert.match(rows[0]['原因'], /缺目标记录/);
-  assert.match(rows[0]['实际处理'], /人工补充已生效/);
+  assert.equal(rows[0]['有效周转天数'], '15');
+  assert.equal(rows[0]['天数来源'], '人工补充目标周转天数');
+  assert.equal(rows[0]['核对事项'], '');
   assert.ok(Math.abs(Number(rows[0]['目标期末库存']) - 150 / 31) < 1e-8);
   if (process.env.MPS_TURNOVER_SCREENSHOT)
     await page.screenshot({ path: process.env.MPS_TURNOVER_SCREENSHOT, fullPage: true });
-  const targets = await downloadRows(page, view, '下载目标库存明细');
-  assert.equal(targets.length, 1);
-  assert.equal(targets[0]['产品编码'], 'B');
-  assert.equal(targets[0]['推导目标库存'], rows[0]['目标期末库存']);
   await view.getByLabel('目标明细月份', { exact: true }).selectOption('2027-01');
-  rows = await downloadRows(page, view, '下载周转天数报告');
+  rows = await downloadRows(page, view, '当前筛选');
   assert.equal(rows.length, 1);
   assert.equal(rows[0]['月份'], '2027-01');
   assert.ok(Math.abs(Number(rows[0]['目标期末库存']) - 150 / 28) < 1e-8);
 });
 
 for (const [businessDate, sourceMonth, versions] of [
-  ['2026-11-20', '2026-11', '纠偏、月初'],
-  ['2026-11-21', '2026-12', '月初、滚动'],
-  ['2026-12-20', '2026-12', '纠偏、月初'],
-  ['2026-12-21', '2027-01', '月初、滚动'],
+  ['2026-11-20', '2026-11', '纠偏 → 月初'],
+  ['2026-11-21', '2026-12', '月初 → 滚动'],
+  ['2026-12-20', '2026-12', '纠偏 → 月初'],
+  ['2026-12-21', '2027-01', '月初 → 滚动'],
 ]) {
   test(`同步周转按业务日${businessDate}读取${sourceMonth}，与评估月份分开`, async (t) => {
     const { frame, calls } = await mpsPage(
@@ -206,7 +249,9 @@ for (const [businessDate, sourceMonth, versions] of [
     const view = frame.getByRole('region', { name: '约束与配置', exact: true });
     await view.getByRole('button', { name: '同步目标库存', exact: true }).click();
     await expect(view).toContainText(`业务日期${businessDate}，安全天数来源月${sourceMonth}`);
-    await expect(view).toContainText(`逐基地SKU按${versions}选择`);
+    await expect(view.getByLabel('目标库存版本').locator('option:checked')).toHaveText(
+      `自动：${versions}`,
+    );
     const reads = calls.filter((call) => call.queryId.startsWith('inventory-targets.'));
     assert.ok(reads.length > 0);
     assert.ok(

@@ -146,7 +146,9 @@ export function salesConfirmationCard(input, options = {}) {
     rate: draft.rate === null ? '—' : draft.rate.toFixed(1) + '%',
     rateKnown: draft.rate !== null,
     ready: draft.scenario === 'ready',
-    pending: true,
+    pending: draft.submission?.status !== 'submitted',
+    hasStatusLabel: draft.submission?.status === 'submitted',
+    statusLabel: draft.submission?.status === 'submitted' ? '已提交' : '',
     separator: false,
     shortages: missing.slice(0, 5).map((line) => ({
       sku: String(line.sku ?? '').trim() || '未提供',
@@ -158,6 +160,13 @@ export function salesConfirmationCard(input, options = {}) {
   };
   if (draft.scenario === 'credit' && priceIssue && !draft.notice?.trim())
     section.instruction += '\n' + priceReason(draft, lines);
+  if (draft.submission?.status === 'submitted') {
+    section.instruction = '订单已提交OMS，本次提交已完成，请勿重复提交。';
+    section.hasPriceSkus = false;
+    section.priceSkusUnconfirmed = false;
+    section.priceSkusUnlocated = false;
+    section.morePriceSkus = false;
+  }
   for (const [name, key] of [
     ['Confirm', 'confirm'],
     ['Defer', 'defer'],

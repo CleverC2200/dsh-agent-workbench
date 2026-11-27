@@ -38,13 +38,15 @@ test('前三步产品详情与业务下载仅保留实际需求基地，不展�
   const section = await openMpsProductDetails(frame);
   await section.getByRole('button', { name: '查看产品 001 的源字段', exact: true }).click();
   const details = frame.getByRole('dialog', { name: '产品源字段与物料组SKU', exact: true });
+  await expect(details.getByRole('button', { name: /^关闭(?:弹窗)?$/ })).toHaveCount(1);
+  await expect(details.locator('.dc-dialog-footer')).toHaveCount(0);
   await expect(details).toContainText('郑州');
   await expect(details).not.toContainText('ODM');
   await expect(details.getByRole('columnheader', { name: '调拨标签', exact: true })).toHaveCount(0);
-  await details.getByRole('button', { name: '关闭', exact: true }).click();
+  await details.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const pending = page.waitForEvent('download');
-  await section.getByRole('button', { name: '下载产品源字段', exact: true }).click();
-  const csv = await mpsDownloadText(await (await pending).path());
+  await section.getByRole('button', { name: '下载产品明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pending).path(), '产品源字段');
   assert.match(csv, /郑州/);
   assert.doesNotMatch(csv, /ODM|调拨标签|自产/);
   await section.getByLabel('搜索产品', { exact: true }).fill('ODM');
@@ -80,24 +82,27 @@ test('第三步基地筛选不混入供给配置基地，真实基地需求仍�
   assert.doesNotMatch(csv, /ODM|供给标签/);
 });
 
-test('前三步数据源详情与下载不提供供给字段，后续步骤保留供给来源入口', async (t) => {
+test('原始产品字段仅在产品明细查看，供给源表保留在主数据对应关系', async (t) => {
   const { page, frame } = await mpsPage(t, config, source);
-  for (const step of ['需求确认', '本月预估发货', '需求加工与收敛']) {
+  const details = frame.getByRole('region', { name: '产品明细', exact: true });
+  await details.locator('summary').click();
+  await details.getByRole('button', { name: '查看源表', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
+  await expect(dialog.getByRole('cell', { name: '郑州', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('tab', { name: '调拨方向', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('tab', { name: '产线SKU产能', exact: true })).toHaveCount(0);
+  await expect(dialog).not.toContainText('ODM');
+  const pending = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: '下载当前页', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pending).path());
+  assert.match(csv, /郑州/);
+  assert.doesNotMatch(csv, /ODM|调拨品标签|transfer_tag|自产/);
+  await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  for (const step of ['本月预估发货', '需求加工与收敛']) {
     await frame.locator('.ap-page-tab').filter({ hasText: step }).click();
-    await frame.getByRole('button', { name: '数据源', exact: true }).click();
-    const dialog = frame.getByRole('dialog', { name: '月主计划数据源', exact: true });
-    await expect(dialog.getByRole('cell', { name: '郑州', exact: true })).toBeVisible();
-    await expect(dialog.getByRole('tab', { name: '调拨方向', exact: true })).toHaveCount(0);
-    await expect(dialog.getByRole('tab', { name: '产线SKU产能', exact: true })).toHaveCount(0);
-    await expect(dialog).not.toContainText('ODM');
-    const pending = page.waitForEvent('download');
-    await dialog.getByRole('button', { name: '下载当前页', exact: true }).click();
-    const csv = await mpsDownloadText(await (await pending).path());
-    assert.match(csv, /郑州/);
-    assert.doesNotMatch(csv, /ODM|调拨品标签|transfer_tag|自产/);
-    await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+    await expect(frame.getByRole('button', { name: '查看源表', exact: true })).toHaveCount(0);
   }
-  await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
-  await frame.getByRole('button', { name: '数据源', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
+  await frame.getByRole('button', { name: '查看源表', exact: true }).click();
   await expect(frame.getByRole('tab', { name: '调拨方向', exact: true })).toBeVisible();
 });

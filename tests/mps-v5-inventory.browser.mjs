@@ -12,15 +12,15 @@ async function download(page, frame, button) {
   const waiting = page.waitForEvent('download');
   await frame.getByRole('button', { name: button, exact: true }).click();
   const file = await waiting;
-  assert.match(file.suggestedFilename(), /\.csv$/);
+  assert.match(file.suggestedFilename(), /\.xlsx$/);
   if (process.env.MPS05_EVIDENCE_DIR)
     await file.saveAs(`${process.env.MPS05_EVIDENCE_DIR}/${file.suggestedFilename()}`);
   const data = await readFile(await file.path());
-  const book = XLSX.read(data.toString('utf8'), { type: 'string', raw: true });
+  const book = XLSX.read(data, { type: 'buffer' });
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
 
-test('同一评估6/7页及业务CSV逐列核库存，下市日均缺项保留来源并用0消化', async (t) => {
+test('同一评估6/7页及业务工作簿逐列核库存，下市日均缺项保留来源并用0消化', async (t) => {
   const { page, frame } = await mpsPage(
     t,
     config,
@@ -38,6 +38,7 @@ test('同一评估6/7页及业务CSV逐列核库存，下市日均缺项保留�
           material_name: code,
           series: '系列',
           product_item: '组',
+          month_order_qty: null,
           shipped: 0,
           prepped: 0,
           unprepped: 0,

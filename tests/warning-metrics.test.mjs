@@ -139,10 +139,9 @@ test('the authenticated warning metric endpoint returns the bundled definition w
               ok: true,
               value: { tasks: [], runs: [], events: [], revision: 'r1' },
             });
-          if (path.endsWith('/status'))
+          if (path === '/api/gea-html/identity')
             return Response.json({
-              ok: true,
-              value: {
+              status: {
                 authenticated: true,
                 environment: 'test',
                 user: { id: 'u', username: 'tester', tenantId: 0 },

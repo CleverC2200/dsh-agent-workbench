@@ -1,8 +1,8 @@
 import { categoryHistoryMonths } from './category-history-periods.js';
 import { sourceDimensions } from './source-projections.js';
-import { call } from '../../../business/shared/channel.js';
-import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
+import { createMpsQueryClient } from './mps-read.js';
 import { annualRows, normalizedMonth, sourceMonthValues } from './master-data.js';
+import { exceedsReadSizeLimit } from './read-size-limit.js';
 
 const text = (value) => {
   if (value === null) return '';
@@ -49,6 +49,11 @@ const countsBy = (rows, key) => {
   for (const row of rows) counts.set(key(row), (counts.get(key(row)) ?? 0) + sourceCount(row));
   return counts;
 };
+export function hasSourceCalculation(kind) {
+  const config = document.getElementById('agent-sql-config');
+  return !!config && Boolean(JSON.parse(config.textContent).queries[kind + '.calculation.detail']);
+}
+
 const tableMonth = (value) => {
   const source = text(value);
   const compact = /^(\d{4})(0[1-9]|1[0-2])$/.exec(source);
@@ -71,6 +76,12 @@ export function sourceTableParameters(kind, month, requestedHistoryMonths) {
       ),
     };
   if (kind === 'annual-pool') return {};
+  if (kind === 'annual-pool.calculation')
+    return {
+      months: Array.from({ length: 9 }, (_, index) =>
+        sourceMonthValues(monthOffset(month, index - 5)),
+      ).flat(),
+    };
   if (kind === 'festival-history')
     return {
       months: Array.from({ length: 8 }, (_, index) =>
@@ -226,28 +237,58 @@ export function planRateRows(rows, month) {
     };
   });
 }
-export async function readSourceTable(kind, month, signal, requestedHistoryMonths) {
-  const parameters = sourceTableParameters(kind, month, requestedHistoryMonths);
+export async function readSourceTable(
+  kind,
+  month,
+  signal,
+  requestedHistoryMonths,
+  priority,
+  { full = false } = {},
+) {
   const element = document.getElementById('agent-sql-config');
   if (!element) throw Error('月主计划数据源尚未装载');
   const config = JSON.parse(element.textContent);
-  const client = createQueryClient(config, (_request, options) =>
-    call(
-      'sql',
-      { queryId: options.queryId, parameters: options.values },
-      { signal: options.signal },
-    ),
+  const client = createMpsQueryClient(config);
+  const useCalculation =
+    !full &&
+    ['annual-pool', 'category-history'].includes(kind) &&
+    Boolean(config.queries[kind + '.calculation.detail']);
+  const queryKind = useCalculation ? kind + '.calculation' : kind;
+  const parameters = sourceTableParameters(
+    kind === 'annual-pool' ? queryKind : kind,
+    month,
+    requestedHistoryMonths,
   );
-  const definition = config.queries[kind + '.detail'];
-  const result = await client.readAll(
-    kind + '.detail',
-    {
-      ...parameters,
-      page_size: 5000,
-      offset: 0,
-    },
-    { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
-  );
+  const definition = config.queries[queryKind + '.detail'];
+  const readPages = (pageSize, atomicPages) =>
+    client.readAll(
+      queryKind + '.detail',
+      { ...parameters, page_size: pageSize, offset: 0 },
+      {
+        signal,
+        keyFields: definition.grain,
+        requiredColumns: definition.columns,
+        maxRows: 100000,
+        priority,
+        atomicPages,
+      },
+    );
+  const readComplete = async (pageSize) => {
+    try {
+      return await readPages(pageSize, Boolean(definition.pagination?.atomicQuery));
+    } catch (error) {
+      if (!signal?.aborted && definition.pagination?.atomicQuery && error.code === 'INVALID_COUNT')
+        return readPages(pageSize, false);
+      throw error;
+    }
+  };
+  let result;
+  try {
+    result = await readComplete(useCalculation ? 10000 : 5000);
+  } catch (error) {
+    if (!useCalculation || signal?.aborted || !exceedsReadSizeLimit(error)) throw error;
+    result = await readComplete(5000);
+  }
   return {
     rows:
       kind === 'forecast'
@@ -260,17 +301,20 @@ export async function readSourceTable(kind, month, signal, requestedHistoryMonth
           : kind === 'annual-pool'
             ? annualRows(result.rows)
             : kind === 'category-history'
-              ? result.rows.map((row) => ({
-                  ...deliveryRows([row], tableMonth(row.stat_month))[0],
-                  基地维度财年发货数量: decimal(row.base_fiscal_act_dl_qty ?? null),
-                  基地财年源月份数: decimal(row.base_fiscal_month_count ?? null),
-                  基地财年有效月份数: decimal(row.base_fiscal_quantity_month_count ?? null),
-                }))
+              ? useCalculation
+                ? result.rows.map(categoryHistoryCalculationRow)
+                : result.rows.map((row) => ({
+                    ...deliveryRows([row], tableMonth(row.stat_month))[0],
+                    基地维度财年发货数量: decimal(row.base_fiscal_act_dl_qty ?? null),
+                    基地财年源月份数: decimal(row.base_fiscal_month_count ?? null),
+                    基地财年有效月份数: decimal(row.base_fiscal_quantity_month_count ?? null),
+                  }))
               : kind === 'plan-rate'
                 ? planRateRows(result.rows, month)
                 : deliveryRows(result.rows, month),
     metadata: {
       period: month,
+      ...(useCalculation ? { projection: 'calculation' } : {}),
       ...(kind === 'category-history'
         ? { requestedMonths: parameters.months.map(tableMonth) }
         : {}),
@@ -288,5 +332,23 @@ export async function readSourceTable(kind, month, signal, requestedHistoryMonth
       configVersion: result.configVersion,
       units: 'unconfirmed',
     },
+  };
+}
+
+function categoryHistoryCalculationRow(row) {
+  const month = tableMonth(row.stat_month);
+  if (!month) throw Error('历史来源月份无法识别');
+  const base = text(row.belong_base);
+  const code = text(row.dimension_value);
+  return {
+    月份: month,
+    基地: base,
+    维度类型: '基地+产品',
+    维度值: code,
+    财年: text(row.fiscal_year),
+    月发货数量: decimal(row.dimension_act_dl_qty),
+    全国维度财年发货数量: decimal(row.national_dimension_fiscal_act_dl_qty),
+    源记录数: 1,
+    粒度状态: base.trim() && code.trim() ? '唯一' : '关键维度缺失',
   };
 }

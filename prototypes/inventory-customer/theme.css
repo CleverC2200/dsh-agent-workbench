@@ -156,6 +156,8 @@ body,
 }
 .arco-table-th {
   background: var(--workbench-subtle) !important;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 body .arco-btn-primary,
 body .arco-modal .arco-modal-footer .arco-btn-primary,
@@ -248,6 +250,24 @@ body[data-ds-dark-theme] .metric-card .metric-benchmark :is(span, small) {
 .customer-list-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; color: var(--muted, #7b8696); font-size: 12px; }
 
 .dealer-table-card :is(.arco-table-th, .arco-table-td) { text-align: center !important; vertical-align: middle; }
+.dealer-table-card .arco-table-th {
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
+}
+.dealer-table-card .arco-table-td {
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
+}
+.metric-card .arco-statistic-value,
+.metric-card .arco-statistic-value-decimal {
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.metric-card :is(.arco-statistic-suffix, .arco-statistic-value-suffix) {
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
+  font-weight: 400;
+}
 .dealer-table-card :is(.arco-table-th-item, .arco-table-cell-with-sorter) { position: relative; text-align: center; }
 .dealer-table-card .arco-table-sorter { position: absolute; right: 4px; top: 50%; margin: 0; transform: translateY(-50%); }
 .dealer-table-card .metric-cell { justify-content: center; }

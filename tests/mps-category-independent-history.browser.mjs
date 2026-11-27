@@ -28,148 +28,173 @@ for (const scenario of [
       'excluded-overlap',
       'other-category-overlap',
     ].includes(scenario);
-    const { page, frame, calls } = await mpsPage(t, config, ({ queryId, parameters }) => {
-      const entries = [
-        ['郑州', 'A', 100],
-        ['华东', 'A', 9000],
-        ['郑州', 'Z', 8000],
-      ];
-      let rows = [];
-      if (queryId.startsWith('products.'))
-        rows = [
-          ['A', '水饺'],
-          ['B', '水饺'],
-          ['Z', '粽子'],
-          ...(scenario === 'other-category-overlap' ? [['T', '汤圆']] : []),
-        ].map(([material_code, responsible_item]) => ({
-          stat_period: parameters.month ?? '2026-12',
-          target_base: '郑州',
-          material_code,
-          material_name: material_code,
-          responsible_item,
-          sub_category: responsible_item,
-          product_item: '组',
-          product_item_name: '组',
-          series: '系列',
-          source_rows: 1,
-        }));
-      if (queryId.startsWith('facts.history'))
-        rows = entries.map(([base, code, quantity]) => ({
-          'agents_scm_cust_deliv_daily_di.belong_base': base,
-          'agents_scm_cust_deliv_daily_di.material_code': code,
-          'agents_scm_cust_deliv_daily_di.act_dl_qty_total': quantity,
-        }));
-      if (queryId.startsWith('facts.plan-quantity'))
-        rows = entries.map(([belong_base, material_code, quantity]) => ({
-          belong_base,
-          material_code,
-          plan_qty_total: quantity,
-          known_plan_qty_total: quantity,
-          source_plan_qty_total: quantity,
-          source_rows: 1,
-          missing_rows: 0,
-          duplicate_rows: 0,
-        }));
-      if (
-        queryId.startsWith('category-history.') &&
-        scenario === 'read-failure' &&
-        parameters.months.at(-1) === '202606'
-      )
-        throw Error('历史源读取失败测试');
-      if (queryId.startsWith('category-history.'))
-        rows = parameters.months.flatMap((stat_month) => {
-          if (scenario === 'missing-month' && stat_month === '202606') return [];
-          const month = Number(stat_month.slice(4));
-          const population =
-            scenario === 'aggregate-only' ? [] : month === 12 ? [['B', 200]] : [['A', 100]];
-          return [
-            ...population.map(([code, quantity]) => ['郑州', code, quantity]),
-            ['华东', 'A', 9000],
-            ['郑州', 'Z', 8000],
-            ['', 'A', 7000],
-            ...(scenario === 'other-category-overlap'
-              ? [['郑州', 'T', parameters.months.at(-1) === '202606' ? 501 : 500]]
-              : []),
-          ].map(([belong_base, dimension_value, quantity]) => ({
-            dimension_type: '基地+产品',
-            stat_month,
-            belong_base:
-              scenario === 'excluded-overlap' &&
-              parameters.months.at(-1) === '202606' &&
-              belong_base === '郑州'
-                ? '郑州基地'
-                : belong_base,
-            dimension_value,
-            dimension_act_dl_qty:
-              belong_base === '郑州' &&
-              dimension_value === 'A' &&
-              stat_month === '202506' &&
-              scenario === 'invalid-quantity'
-                ? null
-                : belong_base === '郑州' &&
-                    dimension_value === 'A' &&
-                    stat_month === '202501' &&
-                    scenario === 'inconsistent-overlap' &&
-                    parameters.months.at(-1) === '202606'
-                  ? 101
-                  : scenario === 'excluded-overlap' &&
-                      parameters.months.at(-1) === '202606' &&
-                      (belong_base !== '郑州' || dimension_value === 'Z')
-                    ? quantity + 1
-                    : quantity,
-            last_year_dimension_act_dl_qty: null,
-            last_month_dimension_act_dl_qty: null,
-            base_fiscal_act_dl_qty: null,
-            base_fiscal_month_count: 1,
-            base_fiscal_quantity_month_count: 1,
-            national_dimension_fiscal_act_dl_qty:
-              scenario === 'excluded-overlap' && parameters.months.at(-1) === '202606'
-                ? 999998
-                : 999999,
-            fiscal_year:
-              stat_month === '202506' && scenario === 'fiscal-conflict'
-                ? '不一致财年'
-                : `${Number(stat_month.slice(0, 4)) - (month < 7 ? 1 : 0)}财年`,
+    const { page, frame, calls } = await mpsPage(
+      t,
+      config,
+      ({ queryId, parameters }) => {
+        const entries = [
+          ['郑州', 'A', 100],
+          ['华东', 'A', 9000],
+          ['郑州', 'Z', 8000],
+        ];
+        let rows = [];
+        if (queryId.startsWith('products.'))
+          rows = [
+            ['A', '水饺'],
+            ['B', '水饺'],
+            ['Z', '粽子'],
+            ...(scenario === 'other-category-overlap' ? [['T', '汤圆']] : []),
+          ].map(([material_code, responsible_item]) => ({
+            stat_period: parameters.month ?? '2026-12',
+            target_base: '郑州',
+            material_code,
+            material_name: material_code,
+            responsible_item,
+            sub_category: responsible_item,
+            product_item: '组',
+            product_item_name: '组',
+            series: '系列',
             source_rows: 1,
           }));
-        });
-      if (queryId.startsWith('annual-pool.'))
-        rows = ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03'].flatMap((stat_month) =>
-          entries.map(([belong_base, material_code, quantity]) => ({
+        if (queryId.startsWith('facts.history'))
+          rows = entries.map(([base, code, quantity]) => ({
+            'agents_scm_cust_deliv_daily_di.belong_base': base,
+            'agents_scm_cust_deliv_daily_di.material_code': code,
+            'agents_scm_cust_deliv_daily_di.act_dl_qty_total': quantity,
+          }));
+        if (queryId.startsWith('facts.plan-quantity'))
+          rows = entries.map(([belong_base, material_code, quantity]) => ({
             belong_base,
             material_code,
+            plan_qty_total: quantity,
+            known_plan_qty_total: quantity,
+            source_plan_qty_total: quantity,
+            source_rows: 1,
+            missing_rows: 0,
+            duplicate_rows: 0,
+          }));
+        if (
+          queryId.startsWith('category-history.') &&
+          scenario === 'read-failure' &&
+          parameters.months.at(-1) === '202606'
+        )
+          throw Error('历史源读取失败测试');
+        if (queryId.startsWith('category-history.'))
+          rows = parameters.months.flatMap((stat_month) => {
+            if (scenario === 'missing-month' && stat_month === '202606') return [];
+            const month = Number(stat_month.slice(4));
+            const population =
+              scenario === 'aggregate-only' ? [] : month === 12 ? [['B', 200]] : [['A', 100]];
+            return [
+              ...population.map(([code, quantity]) => ['郑州', code, quantity]),
+              ['华东', 'A', 9000],
+              ['郑州', 'Z', 8000],
+              ['', 'A', 7000],
+              ...(scenario === 'other-category-overlap'
+                ? [['郑州', 'T', parameters.months.at(-1) === '202606' ? 501 : 500]]
+                : []),
+            ].map(([belong_base, dimension_value, quantity]) => ({
+              dimension_type: '基地+产品',
+              stat_month,
+              belong_base:
+                scenario === 'excluded-overlap' &&
+                parameters.months.at(-1) === '202606' &&
+                belong_base === '郑州'
+                  ? '郑州基地'
+                  : belong_base,
+              dimension_value,
+              dimension_act_dl_qty:
+                belong_base === '郑州' &&
+                dimension_value === 'A' &&
+                stat_month === '202506' &&
+                scenario === 'invalid-quantity'
+                  ? null
+                  : belong_base === '郑州' &&
+                      dimension_value === 'A' &&
+                      stat_month === '202501' &&
+                      scenario === 'inconsistent-overlap' &&
+                      parameters.months.at(-1) === '202606'
+                    ? 101
+                    : scenario === 'excluded-overlap' &&
+                        parameters.months.at(-1) === '202606' &&
+                        (belong_base !== '郑州' || dimension_value === 'Z')
+                      ? quantity + 1
+                      : quantity,
+              last_year_dimension_act_dl_qty: null,
+              last_month_dimension_act_dl_qty: null,
+              base_fiscal_act_dl_qty: null,
+              base_fiscal_month_count: 1,
+              base_fiscal_quantity_month_count: 1,
+              national_dimension_fiscal_act_dl_qty:
+                scenario === 'excluded-overlap' && parameters.months.at(-1) === '202606'
+                  ? 999998
+                  : 999999,
+              fiscal_year:
+                stat_month === '202506' && scenario === 'fiscal-conflict'
+                  ? '不一致财年'
+                  : `${Number(stat_month.slice(0, 4)) - (month < 7 ? 1 : 0)}财年`,
+              source_rows: 1,
+            }));
+          });
+        if (queryId.startsWith('annual-pool.'))
+          rows = ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03'].flatMap((stat_month) =>
+            entries.map(([belong_base, material_code, quantity]) => ({
+              belong_base,
+              material_code,
+              sub_category: '旧分类',
+              stat_month,
+              source_rows: 1,
+              missing_qty: 0,
+              duplicate_rows: 0,
+              demand_qty: quantity,
+            })),
+          );
+        if (queryId.startsWith('annual-pool.') && scenario === 'mixed-annual')
+          rows.push(
+            ...rows
+              .filter((row) => row.belong_base === '郑州' && row.material_code === 'A')
+              .map((row) => ({ ...row, belong_base: '', demand_qty: 7000 })),
+          );
+        if (
+          scenario === 'independent' &&
+          ['annual-pool.detail', 'annual-pool.count'].includes(queryId)
+        )
+          rows.push({
+            belong_base: '郑州',
+            material_code: 'A',
             sub_category: '旧分类',
-            stat_month,
+            stat_month: '2027-06',
             source_rows: 1,
             missing_qty: 0,
             duplicate_rows: 0,
-            demand_qty: quantity,
-          })),
-        );
-      if (queryId.startsWith('annual-pool.') && scenario === 'mixed-annual')
-        rows.push(
-          ...rows
-            .filter((row) => row.belong_base === '郑州' && row.material_code === 'A')
-            .map((row) => ({ ...row, belong_base: '', demand_qty: 7000 })),
-        );
-      return {
-        rows: queryId.endsWith('.count')
-          ? [{ total: rows.length }]
-          : rows.map((row) => ({
-              ...Object.fromEntries(
-                config.queries[queryId].columns.map((column) => [column, null]),
-              ),
-              ...row,
-            })),
-        returnedColumns: config.queries[queryId].columns,
-        configVersion: 'v5-category-detail',
-        totalRowCount: rows.length,
-        offset: 0,
-        hasMorePages: false,
-        dataStatus: 'ok',
-        warnings: [],
-      };
-    });
+            demand_qty: 8765,
+          });
+        if (queryId === 'category-history.calculation.atomic')
+          rows = rows.map((row) => ({
+            ...row,
+            page_scope_total: rows.length,
+            page_row_present: 1,
+          }));
+        return {
+          rows: queryId.endsWith('.count')
+            ? [{ total: rows.length }]
+            : rows.map((row) => ({
+                ...Object.fromEntries(
+                  config.queries[queryId].columns.map((column) => [column, null]),
+                ),
+                ...row,
+              })),
+          returnedColumns: config.queries[queryId].columns,
+          configVersion: 'v5-category-detail',
+          totalRowCount: rows.length,
+          offset: 0,
+          hasMorePages: false,
+          dataStatus: 'ok',
+          warnings: [],
+        };
+      },
+      { optimizedPaging: scenario === 'independent' },
+    );
     await page.clock.setFixedTime(new Date('2026-11-22T12:00:00+08:00'));
     await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
     const creation = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
@@ -198,7 +223,7 @@ for (const scenario of [
       assert(
         calls.some(
           (call) =>
-            call.queryId === 'category-history.detail' &&
+            call.queryId === 'category-history.calculation.atomic' &&
             call.parameters.months.length === 8 &&
             call.parameters.months.includes('202212'),
         ),
@@ -210,8 +235,8 @@ for (const scenario of [
         .click();
       const dialog = frame.getByRole('dialog', { name: '三年同比 · 源值核对', exact: true });
       const pending = page.waitForEvent('download');
-      await dialog.getByRole('button', { name: '下载同比分子分母', exact: true }).click();
-      const text = await mpsDownloadText(await (await pending).path());
+      await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
+      const text = await mpsDownloadText(await (await pending).path(), '分子分母');
       const workbook = XLSX.read(text, { type: 'string', raw: true });
       const records = XLSX.utils
         .sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' })
@@ -226,7 +251,7 @@ for (const scenario of [
         ),
         text,
       );
-      await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+      await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
     }
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
     await frame.getByLabel('数据截止日', { exact: true }).fill('2026-11-22');
@@ -242,6 +267,12 @@ for (const scenario of [
     await expect(
       matrix.getByRole('row').filter({ hasText: '水饺' }).locator('.dc-demand-amount').first(),
     ).toHaveText(complete ? '150' : '待补');
+    if (scenario === 'independent')
+      assert(
+        !calls.some(({ queryId }) =>
+          ['annual-pool.detail', 'category-history.detail'].includes(queryId),
+        ),
+      );
     const sourceDownload = page.waitForEvent('download');
     await frame.getByRole('button', { name: '下载大类池内源明细', exact: true }).click();
     const sourceCsv = await mpsDownloadText(await (await sourceDownload).path());
@@ -267,6 +298,16 @@ for (const scenario of [
         row['产品编码'] === 'B',
     );
     if (complete) assert.equal(Number(december['池内大类财年量']), 1300);
+    if (scenario === 'independent') {
+      assert.equal(
+        sourceRecords.find((row) => row['来源'] === '年度计划' && row['月份'] === '2027-06')[
+          '数量'
+        ],
+        '8765',
+      );
+      assert.equal(december['财年源月份数'], '1');
+      assert(calls.some(({ queryId }) => queryId === 'category-history.detail'));
+    }
     if (scenario === 'other-category-overlap') {
       const conflicted = sourceRecords.find(
         (row) => row['月份'] === '2024-12' && row['产品编码'] === 'T',

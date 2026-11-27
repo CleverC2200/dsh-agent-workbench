@@ -223,6 +223,7 @@ export function createQueryClient(config, execute) {
       signal,
       singlePageFirst = false,
       atomicPages = false,
+      allowPartial = false,
       priority,
     } = {},
   ) {
@@ -325,6 +326,7 @@ export function createQueryClient(config, execute) {
     const rows = [],
       seen = new Set(),
       metadata = [];
+    let partial = false;
     let columnsSignature;
     const accept = (result, offset) => {
       checkVersion(result);
@@ -334,15 +336,16 @@ export function createQueryClient(config, execute) {
       ]);
       if (columnsSignature !== undefined && signature !== columnsSignature)
         fail('RETURN_COLUMNS_CHANGED', '分页期间返回列权限发生变化，未生成汇总');
-      columnsSignature = signature;
-      if (result.rows.length !== Math.min(pageSize, total - offset))
+      const expectedRows = Math.min(pageSize, total - offset);
+      if (result.rows.length > expectedRows || (!allowPartial && result.rows.length < expectedRows))
         fail('RESULT_INCOMPLETE', '分页与计数不一致，未生成汇总');
-      for (const row of result.rows) {
-        const key = JSON.stringify(keyFields.map((k) => row[k]));
-        if (seen.has(key)) fail('UNSTABLE_PAGINATION', '分页出现重复业务键，未生成汇总');
-        seen.add(key);
-        rows.push(row);
-      }
+      const keys = result.rows.map((row) => JSON.stringify(keyFields.map((key) => row[key])));
+      if (new Set(keys).size !== keys.length || keys.some((key) => seen.has(key)))
+        fail('UNSTABLE_PAGINATION', '分页出现重复业务键，未生成汇总');
+      columnsSignature = signature;
+      partial ||= result.rows.length < expectedRows || result.dataStatus === 'partial';
+      keys.forEach((key) => seen.add(key));
+      rows.push(...result.rows);
       metadata.push({
         offset,
         returnedColumns: result.returnedColumns,
@@ -373,23 +376,42 @@ export function createQueryClient(config, execute) {
             if (page.total !== total) fail('SOURCE_CHANGED', '读取期间源计数变化，请重新查询');
             return { ...result, rows: page.rows };
           } catch (error) {
-            if (!failure) failure = { error };
-            stop.abort(error);
+            if (!allowPartial) {
+              if (!failure) failure = { error };
+              stop.abort(error);
+            }
             throw error;
           }
         }),
       );
       if (failure) throw failure.error;
-      results.forEach((result, index) => accept(result.value, offsets[index]));
+      signal?.throwIfAborted();
+      results.forEach((result, index) => {
+        try {
+          if (result.status === 'rejected') throw result.reason;
+          accept(result.value, offsets[index]);
+        } catch (error) {
+          if (!allowPartial) throw error;
+          partial = true;
+        }
+      });
       offset += width * pageSize;
     }
-    if (!atomicId && (await count()) !== total)
-      fail('SOURCE_CHANGED', '读取期间源计数变化，请重新查询');
+    if (!atomicId) {
+      try {
+        if ((await count()) !== total) fail('SOURCE_CHANGED', '读取期间源计数变化，请重新查询');
+      } catch (error) {
+        signal?.throwIfAborted();
+        if (!allowPartial) throw error;
+        partial = true;
+      }
+    }
     return {
       rows,
       total,
       pages: metadata,
       configVersion: version,
+      ...(allowPartial ? { partial } : {}),
       consistency: atomicId
         ? 'page_totals_checked_not_atomic_snapshot'
         : 'count_checked_not_atomic_snapshot',

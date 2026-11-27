@@ -21,6 +21,7 @@ const stock = (code, date, changes = {}) => ({
   total_sales_qty: 0,
   allocated_qty: 0,
   ordered_qty: 0,
+  month_order_qty: null,
   avg_30d_send: 0,
   begin_stock: 500,
   produce_in_qty: 0,
@@ -43,6 +44,28 @@ const records = [
   stock('DUP', '2026-11-23'),
   stock('DUP', '2026-11-23', { total_sales_qty: 9 }),
 ];
+const dailyPlan = (material_code, the_date, ship_qty) => ({
+  belong_base: '郑州',
+  material_code,
+  the_date,
+  in_qty: 0,
+  ship_qty,
+  transfer_in_plan_v1: 7,
+  transfer_in_plan_adj: null,
+  transfer_out_plan_v1: 2,
+  transfer_out_plan_adj: null,
+});
+const dailyPlans = [
+  ...records.map(({ material_code, the_date, total_sales_qty }) =>
+    dailyPlan(
+      material_code,
+      the_date,
+      material_code === 'PACE' && total_sales_qty ? 35 : (total_sales_qty ?? 0),
+    ),
+  ),
+  dailyPlan('PLAN_ONLY', '2026-11-23', 450),
+  dailyPlan('OUTSIDE_POOL', '2026-11-23', 900),
+];
 function shipmentSql(query) {
   return JSON.parse(
     execFileSync(
@@ -53,14 +76,18 @@ function shipmentSql(query) {
 x=json.load(sys.stdin)
 db=sqlite3.connect(':memory:')
 db.row_factory=sqlite3.Row
-cols=list(x['rows'][0])
-db.execute('CREATE TABLE agents_scm_stock_detail_d ('+','.join(cols)+')')
-db.executemany('INSERT INTO agents_scm_stock_detail_d VALUES ('+','.join('?' for _ in cols)+')',[[r[c] for c in cols] for r in x['rows']])
+for table,rows in x['tables'].items():
+  cols=list(rows[0])
+  db.execute('CREATE TABLE '+table+' ('+','.join(cols)+')')
+  db.executemany('INSERT INTO '+table+' VALUES ('+','.join('?' for _ in cols)+')',[[r[c] for c in cols] for r in rows])
 print(json.dumps([dict(r) for r in db.execute(x['sql'],x['parameters'])]))`,
       ],
       {
         input: JSON.stringify({
-          rows: records,
+          tables: {
+            agents_scm_stock_detail_d: records,
+            agents_ads_scm_base_sku_daily_plan_detail_d: dailyPlans,
+          },
           sql: config.queries[query.queryId].request.sql,
           parameters: {
             ...query.parameters,
@@ -75,7 +102,7 @@ print(json.dumps([dict(r) for r in db.execute(x['sql'],x['parameters'])]))`,
 }
 async function download(page, frame) {
   const pending = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载明细', exact: true }).click();
+  await frame.getByRole('button', { name: '下载发货与结存', exact: true }).click();
   const file = await pending;
   if (process.env.MPS03_EVIDENCE_DIR)
     await file.saveAs(`${process.env.MPS03_EVIDENCE_DIR}/shipment.xlsx`);
@@ -158,10 +185,10 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
     mimeType: 'text/csv',
     buffer: Buffer.from(
       '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n' +
-        ['PACE', 'KNOWN', 'MISSING', 'DUP']
+        ['PACE', 'KNOWN', 'MISSING', 'DUP', 'PLAN_ONLY']
           .map(
             (code) =>
-              `郑州,${code},产品${code},${code === 'PACE' || code === 'DUP' ? '点心' : '水饺'},系列,组,,`,
+              `郑州,${code},产品${code},${['PACE', 'DUP', 'PLAN_ONLY'].includes(code) ? '点心' : '水饺'},系列,组,,`,
           )
           .join('\n'),
     ),
@@ -172,31 +199,37 @@ test('成功查询的缺日报和缺发货指标补0，近三天30件除3；重�
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
-  await expect(frame.getByRole('button', { name: '下载明细', exact: true })).toBeEnabled();
+  await expect(frame.getByRole('button', { name: '下载发货与结存', exact: true })).toBeEnabled();
   const rows = await download(page, frame);
   const pace = rows.find((row) => row.产品编码 === 'PACE');
-  assert.equal(pace.近三天日均发货量, '10');
+  assert.equal(pace.本月已发货, '35');
+  assert.equal(pace['近三日日均发货'], '10');
   assert.equal(pace.已备, '20');
   assert.equal(pace.未备, '10');
-  assert.equal(pace.月初库存, '500');
+  assert.equal(pace['月初 1 号库存'], '500');
   assert.equal(pace.调入计划, '7');
   const known = rows.find((row) => row.产品编码 === 'KNOWN');
   assert.equal(known.整月预估发货, '1000');
-  assert.equal(known.月初库存, '500');
+  assert.equal(known['月初 1 号库存'], '500');
   const missing = rows.find((row) => row.产品编码 === 'MISSING');
   assert.equal(missing.整月预估发货, '0');
-  for (const field of [
-    '月初库存',
-    '本月生产入库',
-    '剩余天数入库',
-    '调入计划',
-    '调出计划',
-    '预计月末结存',
-  ])
-    assert.equal(missing[field], '0', field);
+  assert.equal(missing['月初 1 号库存'], '0');
+  for (const field of ['本月生产入库', '剩余天数入库']) assert.equal(missing[field], '', field);
+  assert.equal(missing.调入计划, '0');
+  assert.equal(missing.调出计划, '0');
+  assert.equal(missing.预计月末结存, '0');
   const duplicate = rows.find((row) => row.产品编码 === 'DUP');
   assert.equal(duplicate.整月预估发货, '');
   assert.match(duplicate.预估待补原因, /重复/);
+  const planOnly = rows.find((row) => row.产品编码 === 'PLAN_ONLY');
+  assert.equal(planOnly.产品名称, '产品PLAN_ONLY');
+  assert.equal(planOnly.本月已发货, '450');
+  assert.equal(planOnly.已备, '0');
+  assert.equal(planOnly['月初 1 号库存'], '0');
+  assert.equal(planOnly.本月生产入库, '');
+  assert.equal(planOnly.调入计划, '7');
+  assert.equal(planOnly.调出计划, '2');
+  assert.ok(!rows.some((row) => row.产品编码 === 'OUTSIDE_POOL'));
   if (process.env.MPS03_EVIDENCE_DIR)
     await writeFile(
       `${process.env.MPS03_EVIDENCE_DIR}/shipment-result.json`,

@@ -517,7 +517,7 @@ test('产品老品编码接入同基地历史参考，其他基地老品不扩�
   );
 });
 
-test('业务版本缺源周转天数保留待补，人工补充后重新计算', () => {
+test('源周转天数读取成功但无值时默认按0天，人工补充后重新计算', () => {
   const source = draft();
   source.constraints.safetyDays = [{ base: '甲', days: 99 }];
   const local = buildMpsWorkflow(source, null);
@@ -535,9 +535,9 @@ test('业务版本缺源周转天数保留待补，人工补充后重新计算',
   assert.ok(
     result.rows.every(
       (row) =>
-        row.safetyDays === null &&
-        row.targetInventory === null &&
-        row.safetyDaysSource === 'missing',
+        row.safetyDays === 0 &&
+        row.targetInventory === 0 &&
+        row.safetyDaysSource === 'missing-turnover-days-zero',
     ),
   );
   assert.ok(
@@ -1556,11 +1556,24 @@ test('产品净重按基地及计量单位换算吨数，冲突不退回旧系�
     manual.weights.map((row) => row.tonsPerPiece),
     [0.2, 0.1],
   );
+  for (const tonsPerPiece of [undefined, null, '', '  ']) {
+    const saved = resolveWeightPairs(
+      [{ ...pairs[0], tonsPerPiece, channels: '经销商' }],
+      pairs,
+      old,
+      [raw()],
+    );
+    assert.deepEqual(saved, resolved);
+  }
+  for (const tonsPerPiece of [0, '无效']) {
+    const saved = resolveWeightPairs([{ ...pairs[0], tonsPerPiece }], pairs, old, [raw()]);
+    assert.equal(saved.issues[0].sourceTable, '当前评估版本人工参数');
+  }
 });
 
-test('产品净重同时进入实际排产和年度吨数报告，不依赖旧渠道取数成功', () => {
+test('产品净重在留有空白人工配置时仍进入实际排产和年度吨数报告', () => {
   const sample = workflowPerformanceInput(2);
-  sample.draft.unitWeights = [];
+  sample.draft.unitWeights = [{ base: '甲', code: '0', tonsPerPiece: null, channels: '经销商' }];
   sample.draft.productRaw = ['0', '1'].map((code) => ({
     material_code: code,
     target_base: '甲',
@@ -2003,7 +2016,7 @@ test('评估接入已确认的月初及库存变动，保留预计结存和逐�
   const a = result.plan.rows.find((row) => row.month === source.month && row.code === 'A');
   const b = result.plan.rows.find((row) => row.month === source.month && row.code === 'B');
   assert.equal(a.openingInventory, 12);
-  assert.equal(a.existingInTransitInbound, null);
+  assert.equal(a.existingInTransitInbound, 0);
   assert.equal(b.openingInventory, 21);
   assert.equal(b.existingProductionInbound, 0);
   assert.equal(b.existingInTransitInbound, 0);
@@ -2023,7 +2036,7 @@ test('评估接入已确认的月初及库存变动，保留预计结存和逐�
   );
 });
 
-test('有货物在途证据及调入来源明确为零时才接入，保留人工值和缺项', () => {
+test('评估月已确认的在途和已入库调入独立接入，各变动缺值按零', () => {
   const source = draft();
   const row = { month: source.month, base: '甲', code: 'A' };
   const monthly = { ...row, productionInbound: 4, transferIn: 0, transferOut: 0 };
@@ -2035,20 +2048,52 @@ test('有货物在途证据及调入来源明确为零时才接入，保留人�
   const actual = () => solve().find((item) => item.month === row.month && item.code === row.code);
   assert.equal(actual().existingInTransitInbound, 12);
   assert.match(actual().inventoryMovementSource, /TMS/);
-  for (const pendingTransfer of [2, null]) {
-    monthly.transferIn = pendingTransfer;
-    assert.equal(actual().existingInTransitInbound, null);
+  for (const received of [2, null]) {
+    monthly.transferIn = received;
+    assert.equal(actual().existingInTransitInbound, 12);
+    assert.equal(actual().existingTransferIn, received ?? 0);
   }
   monthly.transferIn = 0;
   evaluation.inventory.transit.rows = [inTransit, inTransit];
-  assert.equal(actual().existingInTransitInbound, null);
+  assert.equal(actual().existingInTransitInbound, 0);
   evaluation.inventory.transit.rows = [inTransit];
   source.inventoryMovements = [{ ...row, transferIn: 8 }];
-  assert.equal(actual().existingInTransitInbound, null);
+  assert.equal(actual().existingInTransitInbound, 12);
   source.inventoryMovements = [{ ...row, transferIn: 0, inTransitInbound: 0, source: '人工确认' }];
   assert.equal(actual().existingInTransitInbound, 0);
   assert.equal(
     solve().find((item) => item.month === row.month && item.code === 'B').existingInTransitInbound,
-    null,
+    0,
   );
+});
+
+test('未开始的12月承接11月预计结存，四项既有变动为零并可按真实约束排产', () => {
+  const fixture = workflowPerformanceInput(2);
+  const { draft: source, shipment } = fixture;
+  shipment.rows[0].end = 10;
+  shipment.rows[1].end = null;
+  source.inventoryMovements[0].productionInbound = 500;
+  const result = buildMpsWorkflow(source, null, shipment, {
+    inventory: { cutoff: '2026-11-26', monthly: null, transit: null },
+  }).plan;
+  const firstMonth = result.rows.filter((row) => row.month === source.month);
+  const [complete, missing] = firstMonth;
+  assert.equal(complete.openingInventory, 10);
+  assert.deepEqual(
+    [
+      complete.existingProductionInbound,
+      complete.existingInTransitInbound,
+      complete.existingTransferIn,
+      complete.existingTransferOut,
+    ],
+    [0, 0, 0, 0],
+  );
+  assert.deepEqual(complete.planMissing, []);
+  assert.ok(complete.mainPlan > 0);
+  assert.ok(
+    result.resourceSchedules.some((row) => row.month === source.month && row.scheduledTons > 0),
+  );
+  assert.equal(missing.openingInventory, null);
+  assert.ok(missing.planMissing.includes('缺前月实际结存'));
+  assert.equal(source.inventoryMovements[0].productionInbound, 500);
 });

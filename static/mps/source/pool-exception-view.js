@@ -1,3 +1,4 @@
+import { renderTablePagination } from './report-page.js';
 import { matchesCategories } from './category-filter.js';
 import { useStepViewField } from './step-view-state.js';
 import { previousFiscalYear } from 'dsh-agent-manage/mps-compute/workflow';
@@ -29,12 +30,12 @@ const columns = [
 ];
 const value = (quantity) => (quantity === null ? '缺失或无效' : quantity);
 
-export function poolSubmissionRows(result, products, relations, categories) {
+export function poolSubmissionRows(exceptions, products, relations, categories) {
   const tags = Map.groupBy(
     [...(products ?? []), ...latestTransferSnapshot(relations?.sources?.transfers ?? []).rows],
     (row) => JSON.stringify([canonicalBaseName(row.target_base), row.material_code?.trim()]),
   );
-  return (result.poolExceptions?.report ?? [])
+  return (exceptions?.report ?? [])
     .filter(
       (row) =>
         matchesCategories(row.category || row.sourceCategory, categories) &&
@@ -118,25 +119,16 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
         : groups[kind].map(detail);
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(rows.length / 25) - 1));
     const title = '产品范围与池外异常';
+    const download = h(
+      'button',
+      {
+        className: 'mps-download',
+        disabled: !rows.length,
+        onClick: () => downloadCsv(`${draft.month}-池外异常-${kinds[kind]}.csv`, columns, rows),
+      },
+      '下载当前池外异常明细',
+    );
     const content = [
-      h(
-        'div',
-        { className: 'dc-card-head' },
-        !collapsible && h('h3', null, title),
-        h(
-          'button',
-          {
-            disabled: !rows.length,
-            onClick: () => downloadCsv(`${draft.month}-池外异常-${kinds[kind]}.csv`, columns, rows),
-          },
-          '下载当前池外异常明细',
-        ),
-      ),
-      h(
-        'p',
-        { className: 'dc-card-note' },
-        '产品清单的基地与SKU确定计算范围。仅用于替换历史的池外SKU不列异常；历史发货与销售提报分别保留来源，总清单按基地SKU去重。报告不自动停用有效需求。以下查看与下载使用相同筛选范围。',
-      ),
       h(
         'div',
         { className: 'dc-toolbar' },
@@ -171,24 +163,13 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
         { tabIndex: 0, role: 'region', 'aria-label': `${kinds[kind]}明细，可横向滚动` },
       ),
       rows.length > 25 &&
-        h(
-          'div',
-          { className: 'dc-toolbar' },
-          h(
-            'button',
-            { disabled: pageIndex === 0, onClick: () => setPage(pageIndex - 1) },
-            '上一页池外异常',
-          ),
-          h('span', null, `第${pageIndex + 1}页，共${rows.length}条`),
-          h(
-            'button',
-            {
-              disabled: (pageIndex + 1) * 25 >= rows.length,
-              onClick: () => setPage(pageIndex + 1),
-            },
-            '下一页池外异常',
-          ),
-        ),
+        renderTablePagination(h, {
+          label: '池外异常',
+          page: pageIndex,
+          total: rows.length,
+          onPageChange: setPage,
+          buttonLabels: ['上一页池外异常', '下一页池外异常'],
+        }),
     ];
     return h(
       'section',
@@ -196,11 +177,22 @@ export function createPoolExceptionReport(react, { downloadCsv }) {
       collapsible
         ? h(
             'details',
-            { className: 'wf-exception-report', open: true },
+            { className: 'wf-exception-report mps-report-details', open: true },
             h('summary', null, title),
+            download,
             ...content,
           )
-        : content,
+        : h(
+            react.Fragment,
+            null,
+            h(
+              'div',
+              { className: 'dc-card-head mps-report-heading' },
+              h('h3', null, title),
+              download,
+            ),
+            ...content,
+          ),
     );
   };
 }

@@ -87,9 +87,9 @@
   inset-inline-start: 0;
   box-sizing: border-box;
   width: min(360px, calc(100cqw - 36px));
-  max-height: 320px;
+  max-height: min(300px, 60vh);
   overflow: auto;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--workbench-border);
   border-radius: 12px;
   background: var(--workbench-surface);
@@ -98,8 +98,8 @@
 
 .lantern-date-options {
   display: grid;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .lantern-date-section {
@@ -128,31 +128,66 @@
   --date-columns: 7;
 }
 
-.lantern-date-section button {
-  min-height: 32px;
-  padding: 4px 0;
-  border: 1px solid transparent;
+html.aps-plugin-host .lantern-date-picker .lantern-date-section > div > button {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 2px;
+  border: 1px solid var(--workbench-border);
   border-radius: 7px;
-  font-size: 11px;
-  font-weight: 600;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
-.lantern-date-section button[aria-pressed='true'] {
-  border-color: var(--workbench-brand-soft);
+html.aps-plugin-host
+  .lantern-date-picker
+  .lantern-date-section
+  > div
+  > button[aria-pressed='true'] {
+  border-color: transparent;
   background: var(--workbench-brand-soft);
   color: var(--workbench-brand);
 }
 
-.lantern-date-section button:not(:disabled):hover {
+html.aps-plugin-host
+  .lantern-date-picker
+  .lantern-date-section
+  > div
+  > button:not(:disabled):hover {
   border-color: #efabb4;
 }
 
-.lantern-date-section button:not(:disabled):not([aria-pressed='true']):hover {
+html.aps-plugin-host
+  .lantern-date-picker
+  .lantern-date-section
+  > div
+  > button:not(:disabled):not([aria-pressed='true']):hover {
   background: var(--workbench-hover);
 }
 
+html.aps-plugin-host .lantern-date-picker .lantern-date-section > div > button:disabled {
+  opacity: 0.4;
+}
+
+html.aps-plugin-host .lantern-date-picker .lantern-date-weeks > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
 .lantern-date-weeks button span {
-  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.lantern-time-toolbar .lantern-date-picker > p {
+  font-size: 10px;
+  font-weight: 700;
 }
 
 @container (max-width: 680px) {
@@ -213,7 +248,8 @@
   min-width: 360px;
   border-collapse: collapse;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 400;
 }
 
 .lantern-table-scroll thead {
@@ -245,7 +281,7 @@
 .lantern-inventory-comparison thead th {
   background: var(--workbench-surface);
   color: var(--workbench-body);
-  font-size: 11px;
+  font-size: var(--workbench-list-font-size, 12px);
   font-weight: 700;
 }
 
@@ -396,7 +432,7 @@
   gap: 8px;
   max-width: 100%;
   color: #667085;
-  font-size: 12px;
+  font-size: var(--workbench-filter-font-size, 12px);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -413,7 +449,8 @@
   background: var(--workbench-surface);
   color: var(--workbench-text);
   box-shadow: 0 1px 2px #1822300a;
-  font: 700 12px/18px var(--workbench-font-family);
+  font: 700 var(--workbench-filter-font-size, 12px) / var(--workbench-filter-line-height, 18px)
+    var(--workbench-font-family);
 }
 
 .agent-workbench-ui .lantern-sales-filter-trigger {
@@ -557,7 +594,8 @@
   background: transparent;
   color: #343b46;
   text-align: start;
-  font: 700 12px/18px var(--workbench-font-family);
+  font: 700 var(--workbench-filter-font-size, 12px) / var(--workbench-filter-line-height, 18px)
+    var(--workbench-font-family);
 }
 
 .agent-workbench-ui.lantern-sales-options button[aria-selected='true'] {
@@ -590,12 +628,18 @@
   color: var(--workbench-body);
 }
 
+.lantern-sales-list :is(th, td) {
+  font: inherit;
+  white-space: nowrap;
+}
+
 .lantern-sales-list thead {
   color: var(--workbench-muted);
 }
 
-.lantern-sales-list :is(th, td) {
-  white-space: nowrap;
+.lantern-sales-list th[scope] {
+  font-weight: 700;
+  font-size: var(--workbench-list-font-size, 12px);
 }
 
 .lantern-sales-list tbody tr[data-depth='1'] {
@@ -654,7 +698,7 @@
   border-radius: 999px;
   background: var(--workbench-muted-surface);
   color: var(--workbench-muted);
-  font-size: 11px;
+  font-size: var(--workbench-table-badge-font-size, 11px);
 }
 
 .lantern-sales-achievement[data-achievement='达标'],
@@ -744,7 +788,8 @@
 
 .lantern-sales-tabs button[role='tab'] {
   min-height: 40px;
-  font-size: 12px;
+  font-size: var(--workbench-list-font-size, 12px);
+  font-weight: 700;
 }
 
 .lantern-module-tabs button:focus-visible,
@@ -782,7 +827,7 @@
 }
 
 .lantern-section:where([data-module='production']) .lantern-metrics {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .lantern-metrics + .lantern-metrics {
@@ -923,7 +968,7 @@
 }
 
 .lantern-metric-heading h3 {
-  font-size: 12px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
   font-weight: 700;
   line-height: 1.4;
 }
@@ -966,13 +1011,15 @@
   align-items: baseline;
   gap: 0 3px;
   color: var(--workbench-muted);
-  font-size: 12px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
 .lantern-value strong {
   color: var(--workbench-text);
-  font-size: 30px;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.04em;
 }
@@ -1011,6 +1058,7 @@
   gap: 5px;
   margin: 0;
   font-size: 10px;
+  font-weight: 400;
 }
 
 .lantern-comparison-head,
@@ -1039,10 +1087,12 @@
 
 .lantern-comparison-head {
   font-size: 9px;
+  font-weight: 400;
 }
 
 .lantern-comparison-empty {
   font-size: 10px;
+  font-weight: 400;
 }
 
 .lantern-details dd[data-trend='up'] {
@@ -1071,6 +1121,10 @@
   border-top: 1px dashed var(--workbench-border);
   font-size: 11px;
   font-weight: 700;
+}
+
+.lantern-target strong {
+  font-weight: inherit;
 }
 
 @container (max-width: 760px) {
@@ -1217,27 +1271,57 @@
 .lantern-trend-chart {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
-  height: 120px;
+  height: 168px;
 }
 
 .lantern-trend-open[data-fixed-card-height] .lantern-trend-chart {
-  height: clamp(54px, calc(var(--lantern-card-height) - 152px), 120px);
+  height: clamp(115px, calc(var(--lantern-card-height) - 124px), 168px);
+}
+
+.lantern-trend-scale,
+.lantern-trend-plot {
+  position: relative;
 }
 
 .lantern-trend-scale {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  margin-block: -8px;
   color: var(--workbench-muted);
   font-size: 10px;
 }
 
-.lantern-trend-plot {
-  position: relative;
-  border-block: 1px solid var(--workbench-border);
-  background: linear-gradient(var(--workbench-border), var(--workbench-border)) center / 100% 1px
-    no-repeat;
+.lantern-trend-scale span {
+  position: absolute;
+  inset-inline-end: 7px;
+  transform: translateY(-50%);
+}
+
+.lantern-trend-gridline,
+.lantern-trend-goal {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1px solid var(--workbench-border);
+}
+
+.lantern-trend-goal {
+  border-top: 1px dashed var(--workbench-muted);
+}
+
+.lantern-trend-goal span {
+  position: absolute;
+  inset-inline-end: 2px;
+  bottom: 2px;
+  color: var(--workbench-body);
+  background: var(--workbench-surface);
+  font-size: 10px;
+}
+
+.lantern-trend-missing {
+  position: absolute;
+  inset-block: 0;
+  display: grid;
+  place-items: center;
+  background: var(--workbench-muted-surface, #f5f6f8);
+  color: var(--workbench-body);
+  font-size: 10px;
 }
 
 .lantern-trend-plot svg {
@@ -1255,22 +1339,64 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--workbench-brand);
+  border: 2px solid var(--workbench-brand);
+  background: var(--workbench-surface);
   transform: translate(-50%, -50%);
 }
 
-.lantern-trend-labels {
-  display: grid;
-  gap: 4px;
+.lantern-trend-point > span {
+  position: absolute;
+  inset-inline-start: 50%;
+  bottom: 7px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: var(--workbench-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lantern-trend-point[data-latest] > span {
+  color: var(--workbench-brand);
+}
+
+.lantern-trend-point > span[data-below] {
+  top: 7px;
+  bottom: auto;
+}
+
+.lantern-table-scroll .lantern-trend-labels {
+  width: calc(100% - 38px);
+  min-width: 0;
   margin: 8px 0 0 38px;
+  table-layout: fixed;
   text-align: center;
   color: var(--workbench-muted);
   font-size: 11px;
 }
 
-.lantern-trend-labels strong {
-  display: block;
+.lantern-trend-labels thead {
+  background: transparent;
+}
+
+.lantern-trend-labels :is(th, td) {
+  padding: 0 2px;
+  border: 0;
+  overflow-wrap: anywhere;
+}
+
+.lantern-trend-labels td {
   color: var(--workbench-text);
+  font-weight: 600;
+}
+
+.lantern-trend-actions {
+  align-items: center;
+  margin-top: 8px;
+}
+
+.lantern-trend-actions button[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 @container (max-width: 540px) {
@@ -1283,4 +1409,66 @@
   .lantern-sales-trend {
     animation: none;
   }
+}
+
+.lantern-insight {
+  margin-block: 12px;
+  border-radius: 10px;
+}
+
+.lantern-insight .lantern-trend-toolbar h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lantern-insight .lantern-trend-toolbar h3 span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--workbench-surface);
+  background: var(--workbench-brand);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lantern-insight .lantern-trend-toolbar h3 svg {
+  width: 14px;
+  height: 14px;
+}
+
+.lantern-fixed-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--workbench-body);
+  font-size: 12px;
+}
+
+.lantern-merged-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--workbench-border);
+}
+
+.lantern-merged-heading p {
+  color: var(--workbench-body);
+  font-size: 11px;
+}
+
+.lantern-insight button {
+  padding: 6px 10px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+}
+
+.lantern-insight li + li {
+  margin-top: 4px;
 }

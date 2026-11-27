@@ -2,6 +2,9 @@ import { createQueryClient } from '../../../business/shared/configured-query-cli
 import { canonicalBaseName } from './relations.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
+export const hasUnitWeightOverride = (value) =>
+  value != null && (typeof value !== 'string' || text(value) !== '');
+
 const positive = (value) => {
   if (
     typeof value !== 'number' &&

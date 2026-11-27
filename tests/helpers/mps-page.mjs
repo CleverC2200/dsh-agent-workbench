@@ -1,8 +1,34 @@
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './author-page.mjs';
+
+function shipmentFixtureRow(row, cutoff) {
+  const dates = { open_date: row.open == null ? null : cutoff };
+  for (const direction of ['in', 'out']) {
+    const adjusted = row[`transfer_${direction}_plan_adj`];
+    const quantity =
+      Number(row.transfer_rows) === 1 ? (adjusted ?? row[`transfer_${direction}_plan_v1`]) : null;
+    Object.assign(dates, {
+      [`transfer_${direction}_qty`]: quantity ?? 0,
+      [`transfer_${direction}_date`]: quantity == null ? null : row.transfer_date,
+      [`transfer_${direction}_adjusted`]: quantity == null ? null : Number(adjusted != null),
+      [`transfer_${direction}_conflicts`]: Number(Number(row.transfer_rows) > 1),
+    });
+  }
+  return { ...dates, ...row };
+}
+
 export async function mpsPage(t, config, execute, options = {}) {
-  const page = await authorPage(t, { ...options, mpsConfig: config });
+  const queryFixture = options.optimizedPaging ? config : structuredClone(config);
+  if (!options.optimizedPaging && queryFixture)
+    for (const id of Object.keys(queryFixture.queries)) {
+      if (id.includes('.calculation.')) delete queryFixture.queries[id];
+      if (id === 'facts.history') queryFixture.queries[id].parameterSpec.page_size.maximum = 500;
+      if (id === 'facts.shipment-history')
+        queryFixture.queries[id].parameterSpec.page_size.maximum = 200;
+    }
+  const page = await authorPage(t, { ...options, mpsConfig: queryFixture });
+  await options.beforeOpen?.(page);
   const calls = [];
   const contexts = [];
   await page.exposeFunction('mpsQuery', async (message) => {
@@ -10,7 +36,13 @@ export async function mpsPage(t, config, execute, options = {}) {
     if (message.method !== 'sql') return {};
     assert.deepEqual(Object.keys(message.parameters).sort(), ['parameters', 'queryId']);
     calls.push(message.parameters);
-    return execute(message.parameters);
+    const result = await execute(message.parameters);
+    const { queryId, parameters } = message.parameters;
+    if (queryId !== 'facts.shipment' || !result?.rows) return result;
+    return {
+      ...result,
+      rows: result.rows.map((row) => shipmentFixtureRow(row, parameters.cutoff)),
+    };
   });
   await page.evaluate(() => {
     window.addEventListener('message', (event) => {

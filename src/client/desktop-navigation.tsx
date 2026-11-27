@@ -26,6 +26,10 @@ export type NavigationView = z.infer<typeof navigationView>;
 type NavigationStage = z.infer<typeof navigationStage>;
 type NavigationObservation = { deadline: number; ended: boolean };
 
+export function createNavigationObservation(): NavigationObservation {
+  return { deadline: Date.now() + 20_000, ended: false };
+}
+
 export type ReadyNavigation = Extract<NavigationView, { state: 'ready' }>;
 export type PageNavigation = ReadyNavigation & {
   visible(): void;
@@ -153,7 +157,7 @@ export function DesktopNavigation({
   observation?: NavigationObservation;
 }) {
   const observed = useSyncExternalStore(identity.subscribe, identity.getSnapshot);
-  const lifetime = useRef({ deadline: Date.now() + 5000, ended: false });
+  const lifetime = useRef(createNavigationObservation());
   const startup = observation ?? lifetime.current;
   const [view, setView] = useState<NavigationView>({ state: 'idle' });
   const active = useRef<{
@@ -166,6 +170,7 @@ export function DesktopNavigation({
   const actionEpoch = useRef(0);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
+  const resumePoll = useRef<() => void>();
   useEffect(() => {
     const controller = new AbortController();
     owner.current = controller;
@@ -278,7 +283,15 @@ export function DesktopNavigation({
         });
     };
     const poll = async () => {
+      resumePoll.current = undefined;
       try {
+        if (identity.getSnapshot().pagesReady === false && !startup.ended) {
+          resumePoll.current = () => {
+            clearTimeout(timer);
+            void poll();
+          };
+          return;
+        }
         consume(await request('poll', {}, controller.signal));
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -319,6 +332,7 @@ export function DesktopNavigation({
     void poll();
     return () => {
       controller.abort();
+      resumePoll.current = undefined;
       clearTimeout(timer);
       clearTimeout(startupTimer);
       active.current?.controller.abort();
@@ -334,6 +348,9 @@ export function DesktopNavigation({
     observed.status?.authenticated,
     startup,
   ]);
+  useEffect(() => {
+    if (observed.pagesReady !== false) resumePoll.current?.();
+  }, [observed.pagesReady]);
   const action = async (dismiss: boolean) => {
     if (busy || !owner.current || owner.current.signal.aborted) return;
     const controller = owner.current;
@@ -382,12 +399,12 @@ export function DesktopNavigation({
       ? 'navigationLogin'
       : view.state === 'ready'
         ? 'navigationOpening'
-        : view.state === 'error' && !view.receipt
-          ? 'navigationServiceUnavailable'
-          : /EXPIRED|REVOKED/.test(code)
-            ? 'navigationExpired'
-            : /FORBIDDEN/.test(code)
-              ? 'navigationForbidden'
+        : /EXPIRED|REVOKED/.test(code)
+          ? 'navigationExpired'
+          : /FORBIDDEN/.test(code)
+            ? 'navigationForbidden'
+            : view.state === 'error' && !view.receipt
+              ? 'navigationServiceUnavailable'
               : /UNSUPPORTED|UNAVAILABLE|INCOMPLETE/.test(code)
                 ? 'navigationUnavailable'
                 : 'navigationFailed';

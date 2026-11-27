@@ -42,6 +42,46 @@ function component(state = fixture()) {
   return { dom, document: dom.window.document, view };
 }
 
+test('page names live in the window title without duplicate body headings while navigation remains usable', () => {
+  for (const [view, rate, credit, title] of [
+    ['details', 95, false, '订单明细'],
+    ['process', 95, false, '订单提交'],
+    ['process', 70, false, '商品增减'],
+    ['price', 95, false, '确认'],
+    ['process', 95, true, '确认额度已补充'],
+  ]) {
+    const state = fixture();
+    state.view = view;
+    state.snapshot.satisfactionRate = rate;
+    if (credit) state.snapshot.credit = { status: 'insufficient', shortfall: 200 };
+    const f = component(state);
+    try {
+      assert.equal(f.document.title, title);
+      assert.equal(f.document.querySelector('#orderEditor header h1'), null);
+      const back = f.document.querySelector('#orderEditor header .editor-back');
+      assert.equal(back.getAttribute('aria-label'), '返回');
+      assert.equal(back.title, '返回');
+      assert.equal(back.querySelector('svg').getAttribute('aria-hidden'), 'true');
+      assert.equal(back.querySelector('.editor-visually-hidden').textContent, '返回');
+      assert.equal(f.document.getElementById('orderEditor').getAttribute('aria-label'), title);
+      assert.ok(
+        [...f.document.querySelectorAll('header button')].some(
+          (button) => button.textContent === '返回',
+        ),
+      );
+      if (title === '商品增减') {
+        [...f.document.querySelectorAll('button')]
+          .find((button) => button.textContent === '商品推荐')
+          .click();
+        assert.equal(f.document.title, '商品推荐');
+        assert.equal(f.document.querySelector('#orderEditor header h1'), null);
+      }
+    } finally {
+      f.dom.window.close();
+    }
+  }
+});
+
 test('preview uses normal confirmation labels but never invokes the business callback', async () => {
   const state = fixture();
   state.snapshot.lines = [
@@ -219,7 +259,10 @@ test('catalog category and search filters preserve the draft when returning to t
     const search = document.querySelector('input[aria-label="商品搜索"]');
     search.value = '不存在';
     search.dispatchEvent(new dom.window.Event('input'));
-    assert.match(document.querySelector('.editor-products').textContent, /没有匹配/);
+    assert.match(
+      document.querySelector('.editor-products').textContent,
+      /当前可读取范围内未找到匹配商品/,
+    );
     search.value = '';
     search.dispatchEvent(new dom.window.Event('input'));
     click('全部');
@@ -318,7 +361,8 @@ test('Workbench view selection opens the editor without sending the view to the 
     };
     dom.window.eval(editor + '\n' + controller);
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(dom.window.document.querySelector('#orderEditor h1').textContent, '订单提交');
+    assert.equal(dom.window.document.querySelector('#orderEditor h1'), null);
+    assert.equal(dom.window.document.title, '订单提交');
     assert.equal(dom.window.document.getElementById('orderEditor').hidden, false);
     assert.equal(dom.window.document.getElementById('confirmationMain').hidden, true);
     assert.doesNotMatch(requests[0], /mode=|view=/);
@@ -426,6 +470,122 @@ test('order list asks for authorized related data and keeps its page links in Wo
     );
   } finally {
     dom.window.close();
+  }
+});
+
+test('each pending order shows its actual reason without changing links or completed rows', async () => {
+  const dom = new JSDOM(html, {
+    runScripts: 'outside-only',
+    url: 'https://fixture.invalid/window/test?view=list',
+  });
+  const entries = [
+    { reason: 'SAP查价提示客户冻结，请联系业务核实', status: 'pending' },
+    { reason: '信用额度校验未通过，缺口 200 元。\n部分商品缺货，请核对。', status: 'pending' },
+    { reason: '订单满足率 70.0%，未达到90%，请核对库存及商品数量。', status: 'pending' },
+    { reason: '请核对订单信息后处理。', status: 'pending' },
+    { reason: '服务返回 <img src=x onerror=alert(1)>，待核实。', status: 'pending' },
+    { reason: '旧异常不应继续显示', status: 'resolved' },
+  ];
+  try {
+    dom.window.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        ...fixture(),
+        related: {
+          items: entries.map((entry, index) => ({
+            ...entry,
+            snapshot: { ...fixture().snapshot, orderNo: `ORDER-${index}` },
+            entryUrl: `https://fixture.invalid/entry?reference=order-${index}`,
+          })),
+          total: entries.length,
+        },
+      }),
+    });
+    dom.window.eval(editor + '\n' + controller);
+    await new Promise((resolve) => setImmediate(resolve));
+    const articles = [...dom.window.document.querySelectorAll('#items article')];
+    assert.equal(articles.length, entries.length);
+    for (let index = 0; index < entries.length; index++) {
+      const article = articles[index],
+        entry = entries[index];
+      if (entry.status === 'pending') {
+        assert.equal(
+          article.querySelector('.order-list-reason').textContent,
+          `待处理原因：${entry.reason}`,
+        );
+        for (const [label, view] of [
+          ['订单处理', 'process'],
+          ['暂缓发货', 'defer'],
+        ]) {
+          const link = [...article.querySelectorAll('a')].find(
+            (item) => item.textContent === label,
+          );
+          assert.equal(new URL(link.href).searchParams.get('view'), view);
+          assert.equal(new URL(link.href).searchParams.get('reference'), `order-${index}`);
+        }
+      } else {
+        assert.equal(article.querySelector('.order-list-reason'), null);
+        assert.equal(article.textContent.includes(entry.reason), false);
+        assert.equal(article.querySelectorAll('a').length, 1);
+      }
+    }
+    assert.equal(dom.window.document.querySelector('#items img'), null);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('older list data uses explicit known checks and never invents a shortage from an invalid rate', async () => {
+  for (const [snapshot, expected, excluded] of [
+    [
+      { satisfactionRate: 99, priceStatus: 'PRICE_MISSING', lines: [{ shortage: 0 }] },
+      '价格校验未通过',
+      '库存不足',
+    ],
+    [
+      { satisfactionRate: 99, credit: { status: 'insufficient' }, lines: [{ shortage: 0 }] },
+      '信用额度校验未通过',
+      '库存不足',
+    ],
+    [{ satisfactionRate: 70, lines: [{ shortage: 5 }] }, '库存不足', '价格校验未通过'],
+    [{ satisfactionRate: -1, lines: [{ shortage: 0 }] }, '满足率尚未明确', '库存不足'],
+    [{ satisfactionRate: 100, lines: [{ shortage: 2 }] }, '满足率与缺货明细不一致', '库存不足'],
+    [{ satisfactionRate: 95, lines: [{}] }, '缺货信息未完整提供', '库存不足'],
+    [
+      { satisfactionRate: 100, lines: [{ shortage: 0 }] },
+      '待销售核对订单信息并提交',
+      '价格校验未通过',
+    ],
+  ]) {
+    const dom = new JSDOM(html, {
+      runScripts: 'outside-only',
+      url: 'https://fixture.invalid/window/test?view=list',
+    });
+    try {
+      dom.window.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          ...fixture(),
+          related: {
+            items: [
+              {
+                snapshot: { orderNo: 'ORDER', customer: '客户', ...snapshot },
+                status: 'pending',
+                entryUrl: 'https://fixture.invalid/entry?reference=one',
+              },
+            ],
+            total: 1,
+          },
+        }),
+      });
+      dom.window.eval(editor + '\n' + controller);
+      await new Promise((resolve) => setImmediate(resolve));
+      const reason = dom.window.document.querySelector('.order-list-reason').textContent;
+      assert.ok(reason.includes(expected), reason);
+      assert.equal(reason.includes(excluded), false, reason);
+    } finally {
+      dom.window.close();
+    }
   }
 });
 
@@ -968,6 +1128,73 @@ test('catalog automatically loads customer products once and preserves drafts on
   }
 });
 
+test('loaded customer categories also classify original products without changing their draft quantity', async () => {
+  const f = component(
+    catalogFixture(async () => [
+      { sku: 'A', name: '原商品', category: '水饺', subCategory: '猪肉水饺' },
+      { sku: 'NEW', name: '汤圆', category: '汤圆', subCategory: '黑芝麻' },
+    ]),
+  );
+  try {
+    await catalogTick();
+    assert.match(f.document.querySelector('[aria-label="商品一级分类"]').textContent, /水饺.*汤圆/);
+    editorButton(f.document, '水饺').click();
+    assert.match(f.document.querySelector('[aria-label="商品二级分类"]').textContent, /猪肉水饺/);
+    assert.doesNotMatch(
+      f.document.querySelector('[aria-label="商品二级分类"]').textContent,
+      /黑芝麻/,
+    );
+    assert.ok(f.document.querySelector('article[data-sku="A"]'));
+    assert.equal(f.document.querySelector('article[data-sku="NEW"]'), null);
+    editorButton(f.document, '猪肉水饺').click();
+    assert.equal(f.view.getDraft().find((line) => line.sku === 'A').quantity, 10);
+  } finally {
+    f.dom.window.close();
+  }
+});
+
+test('clicking a lower category keeps the window and sidebar in place and only refreshes the product list', () => {
+  const state = fixture();
+  state.snapshot.satisfactionRate = 70;
+  state.snapshot.lines = Array.from({ length: 18 }, (_, index) => ({
+    sku: `ITEM-${index}`,
+    name: `商品${index}`,
+    quantity: 10,
+    orderMultiple: 1,
+    category: index < 12 ? '水饺' : '汤圆',
+    subCategory: `分组${index}`,
+  }));
+  const f = component(state);
+  try {
+    const root = f.document.getElementById('orderEditor');
+    const body = root.querySelector('.editor-body');
+    const sidebar = root.querySelector('[aria-label="商品二级分类"]');
+    const tabs = root.querySelector('[aria-label="商品一级分类"]');
+    const products = root.querySelector('[aria-label="商品增减列表"]');
+    sidebar.scrollTop = 600;
+    body.scrollTop = 100;
+    tabs.scrollLeft = 35;
+    products.scrollTop = 300;
+    editorButton(f.document, '分组17').click();
+    assert.equal(root.querySelector('.editor-body'), body);
+    assert.equal(root.querySelector('[aria-label="商品二级分类"]'), sidebar);
+    assert.equal(sidebar.scrollTop, 600);
+    assert.equal(body.scrollTop, 100);
+    assert.equal(tabs.scrollLeft, 35);
+    assert.equal(products.scrollTop, 0);
+    assert.equal(products.querySelectorAll('article').length, 1);
+    assert.equal(products.querySelector('article').dataset.sku, 'ITEM-17');
+    editorButton(f.document, '水饺').click();
+    assert.equal(root.querySelector('[aria-label="商品一级分类"]'), tabs);
+    assert.equal(body.scrollTop, 100);
+    assert.equal(tabs.scrollLeft, 35);
+    assert.equal(products.querySelectorAll('article').length, 12);
+    assert.equal(f.view.getDraft().find((line) => line.sku === 'ITEM-17').quantity, 10);
+  } finally {
+    f.dom.window.close();
+  }
+});
+
 test('catalog failures do not loop and explicit search retries with the entered query', async () => {
   const calls = [];
   const f = component(
@@ -1011,11 +1238,25 @@ test('catalog lookup is deferred until entry and unavailable to read-only viewer
       editorButton(f.document, '+ 商品').click();
       await catalogTick();
       assert.equal(calls.length, readOnly ? 0 : 1);
-      if (!readOnly)
+      if (!readOnly) {
         assert.match(
+          f.document.getElementById('orderEditor').textContent,
+          /未读取到当前客户的可售商品.*客户读取范围/,
+        );
+        assert.doesNotMatch(
           f.document.getElementById('orderEditor').textContent,
           /当前客户没有匹配的可售商品/,
         );
+        const search = f.document.querySelector('[aria-label="商品搜索"]');
+        search.value = 'NO-MATCH';
+        search.dispatchEvent(new f.dom.window.Event('input'));
+        editorButton(f.document, '查找商品').click();
+        await catalogTick();
+        assert.match(
+          f.document.getElementById('orderEditor').textContent,
+          /当前可读取范围内未找到匹配商品.*调整关键词/,
+        );
+      }
     } finally {
       f.dom.window.close();
     }

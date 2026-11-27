@@ -253,7 +253,7 @@ test('历史明细和需求缺项导出保留全部当前范围的记录', async
   const movements = constraints.getByRole('region', { name: '既有库存变动确认', exact: true });
   const entries = movements.getByRole('table').locator('tbody tr');
   await expect(entries).toHaveCount(25);
-  await beginAdjustment(constraints);
+  await beginAdjustment(frame);
   const enterMovement = async (quantity) => {
     const entry = entries.first();
     const input = entry.getByRole('textbox', { name: /既有生产入库$/ });
@@ -267,8 +267,10 @@ test('历史明细和需求缺项导出保留全部当前范围的记录', async
   await movements.getByRole('button', { name: '既有库存变动下一页' }).click();
   const secondInput = await enterMovement('20');
   assert.notEqual(firstInput, secondInput);
-  await saveAdjustment(constraints);
-  await expect(constraints.getByRole('button', { name: '调整', exact: true })).toBeEnabled();
+  await saveAdjustment(frame);
+  await expect(
+    frame.locator('.dc-adjustment-actions').getByRole('button', { name: '调整', exact: true }),
+  ).toBeEnabled();
   await expect(movements.getByLabel(secondInput, { exact: true })).toHaveText('20');
   await movements.getByRole('button', { name: '既有库存变动上一页' }).click();
   await expect(movements.getByLabel(firstInput, { exact: true })).toHaveText('10');

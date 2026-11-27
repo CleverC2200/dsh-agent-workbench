@@ -35,8 +35,9 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
   padding-right: 0;
   gap: 8px;
   color: var(--v02-text-strong);
-  font-size: 12px;
+  font-size: var(--workbench-kpi-title-font-size, 12px);
   line-height: 1.4;
+  font-weight: 700;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-name > span {
   min-width: 0;
@@ -67,12 +68,14 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value strong {
   color: var(--v02-text-strong);
-  font-size: 20px;
-  line-height: 1.15;
+  font-size: var(--workbench-kpi-value-font-size, 30px);
+  line-height: 1.1;
+  font-weight: 700;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value span {
   color: var(--v02-text-muted);
-  font-size: 11px;
+  font-size: var(--workbench-kpi-unit-font-size, 12px);
+  font-weight: 400;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-comparison-head {
   grid-template-columns: minmax(0, 1fr) auto;
@@ -135,11 +138,6 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
   white-space: nowrap;
 }
 
-html.aps-plugin-host #category-operations .category-health-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
 html.aps-plugin-host #category-operations .category-health-card {
   min-width: 0;
 }
@@ -513,18 +511,10 @@ html.aps-plugin-host .analysis-workspace .category-table-tabs-scroll::-webkit-sc
   white-space: normal;
 }
 
-@media (max-width: 900px) {
-  html.aps-plugin-host #category-operations .category-health-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 @media (max-width: 520px) {
   html.aps-plugin-host .date-picker-menu {
     left: 0;
     right: auto;
-  }
-  html.aps-plugin-host #category-operations .category-health-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
   html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading {
     padding: 12px;
@@ -535,14 +525,44 @@ html.aps-plugin-host .analysis-workspace .category-table-tabs-scroll::-webkit-sc
   }
 }
 
+html.aps-plugin-host :is(.date-picker-button, .week-button) {
+  border: 1px solid var(--workbench-control-border, #d9dde3);
+  border-radius: 10px;
+  background: var(--workbench-surface, #ffffff);
+  color: var(--workbench-text, #343b46);
+  box-shadow: 0 1px 2px #1822300a;
+  font: 700 12px / 18px var(--workbench-font-family, sans-serif);
+}
+
+html.aps-plugin-host :is(.date-picker-button, .week-button):hover {
+  border-color: #efabb4;
+  background: var(--workbench-hover, #fffafb);
+}
+
+html.aps-plugin-host
+  :is(.date-picker-button, .week-button):is([aria-expanded='true'], :focus-visible) {
+  border-color: var(--workbench-brand, #df1732);
+  box-shadow: 0 0 0 3px #df17321a;
+}
+
+html.aps-plugin-host :is(.date-picker-button, .week-button)[aria-expanded='true'] svg:last-child {
+  transform: rotate(180deg);
+}
+
+html.aps-plugin-host :is(.date-picker-menu, .week-filter-menu) {
+  z-index: 80;
+  padding: 5px;
+  border: 1px solid var(--workbench-border, #e7e9ee);
+  border-radius: 12px;
+  background: var(--workbench-surface, #ffffff);
+  box-shadow:
+    0 14px 38px #18223024,
+    0 2px 8px #1822300a;
+}
+
 html.aps-plugin-host .date-picker-menu {
   width: 264px;
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--ui-border, #e3e6ea);
-  border-radius: 8px;
-  background: var(--ui-surface, #fff);
-  box-shadow: 0 12px 32px #1d20281a;
 }
 html.aps-plugin-host .date-picker-menu > small,
 html.aps-plugin-host .date-picker-sections section > strong {
@@ -567,36 +587,35 @@ html.aps-plugin-host .date-picker-month {
 html.aps-plugin-host .date-picker-day {
   gap: 3px;
 }
-html.aps-plugin-host .date-picker-menu .date-picker-sections button {
+html.aps-plugin-host :is(.date-picker-sections, .week-filter-menu) button {
   width: 100%;
-  height: 32px;
-  min-height: 32px;
+  height: auto;
+  min-height: 34px;
   padding: 0 4px;
   border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--ui-surface, #fff);
-  color: var(--ui-secondary, #555d68);
-  font: 12px/1.4 var(--ui-font, sans-serif);
+  border-radius: 7px;
+  background: var(--workbench-surface, #ffffff);
+  color: var(--workbench-text, #343b46);
+  font: 700 12px / 18px var(--workbench-font-family, sans-serif);
 }
-html.aps-plugin-host .date-picker-menu .date-picker-year button {
-  height: 30px;
-  min-height: 30px;
-  background: var(--ui-muted-surface, #f5f6f8);
+
+html.aps-plugin-host .week-filter-menu button {
+  padding-inline: 10px;
 }
-html.aps-plugin-host .date-picker-menu .date-picker-day button {
-  height: 28px;
-  min-height: 28px;
+
+html.aps-plugin-host :is(.date-picker-sections, .week-filter-menu) button:hover:not(:disabled) {
+  background: var(--workbench-hover, #fffafb);
+  color: var(--workbench-text, #343b46);
 }
-html.aps-plugin-host .date-picker-menu .date-picker-sections button:hover:not(:disabled) {
-  border-color: var(--ui-accent-line, #efabb4);
-  background: var(--ui-hover, #fffafb);
-  color: var(--ui-accent, #df1732);
+
+html.aps-plugin-host :is(.date-picker-sections, .week-filter-menu) button.selected {
+  background: var(--workbench-brand-soft, #fff0f2);
+  color: var(--workbench-text, #343b46);
 }
-html.aps-plugin-host .date-picker-menu .date-picker-sections button.selected {
-  border-color: var(--ui-accent-line, #efabb4);
-  background: var(--ui-accent-soft, #fff0f2);
-  color: var(--ui-accent, #df1732);
-  font-weight: 600;
+
+html.aps-plugin-host :is(.date-picker-sections, .week-filter-menu) button.selected svg,
+html.aps-plugin-host :is(.date-picker-month, .date-picker-day) button.selected {
+  color: var(--workbench-brand, #df1732);
 }
 html.aps-plugin-host .date-picker-menu .date-picker-sections button:disabled {
   opacity: 0.35;

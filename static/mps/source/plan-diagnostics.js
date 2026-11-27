@@ -163,7 +163,7 @@ export function attachPlanReport(
                     .filter((field) => source[field] == null)
                     .map(
                       (field) =>
-                        `缺${{ open: '截止日库存', inbound: '累计生产入库', remaining: '剩余入库', fin: '有效预估发货' }[field]}`,
+                        `缺${{ open: '当月有效月初库存', inbound: '累计生产入库', remaining: '剩余入库', fin: '有效预估发货' }[field]}`,
                     ),
                   ...(source.forecastIssue ? [source.forecastIssue] : []),
                 ];
@@ -176,15 +176,15 @@ export function attachPlanReport(
           ...details,
         ].join('；'),
         row.month === plan.context.month
-          ? 'ai_db.agents_scm_stock_detail_d / 本月预估发货'
+          ? '本月预估发货 / ai_db.agents_scm_stock_detail_d / ai_db.agents_ads_scm_base_sku_daily_plan_detail_d'
           : '上月求解结果',
         row.month === plan.context.month
-          ? 'begin_stock / produce_in_qty / 预估发货 / 剩余入库'
+          ? 'begin_stock / in_qty / 预估发货 / 剩余入库'
           : '上月实际期末结存',
         row.month === plan.context.month
           ? ['unread', 'loading', 'failed', 'error', 'denied'].includes(shipmentSnapshot?.status)
             ? '先核对读取错误、访问权限及截止日，重新同步有效来源后再核对具体缺项'
-            : '人工补齐第二步该基地SKU的截止日库存、入库和预估发货输入，形成有效月末结存后重新评估'
+            : '核对第二步该基地SKU的当月有效月初库存及结存输入，形成有效月末结存后重新评估'
           : '先处理上月该基地SKU的需求、库存或产能异常，取得实际期末结存后重新评估',
       );
     }

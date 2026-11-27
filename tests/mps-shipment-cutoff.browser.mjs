@@ -1,3 +1,4 @@
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -19,6 +20,7 @@ function fixture({ queryId, parameters }, latest = '2026-10-31') {
               material_name: '产品A',
               series: '系列',
               product_item: '汤圆',
+              month_order_qty: null,
               shipped: 310,
               prepped: 0,
               unprepped: 0,
@@ -104,10 +106,8 @@ test('new MPS versions discover the latest source date for their statistical mon
     '2026-10-31',
   );
   const waiting = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '下载明细', exact: true }).click();
-  const chunks = [];
-  for await (const chunk of await (await waiting).createReadStream()) chunks.push(chunk);
-  assert.match(Buffer.concat(chunks).toString('utf8'), /2026-10-31,31,31,2026-10/);
+  await frame.getByRole('button', { name: '下载发货与结存', exact: true }).click();
+  assert.match(await mpsDownloadText(await (await waiting).path()), /2026-10-31,31,31,2026-10/);
 });
 
 test('an existing explicit cutoff survives restore while a new reference copy discovers its own latest date', async (t) => {
@@ -251,7 +251,7 @@ test('当月发货可查看且能取得并保留上月计算快照', async (t) =
     config,
     (query) =>
       fixture(query, query.parameters.month === '2026-10-01' ? '2026-10-31' : '2026-11-16'),
-    november,
+    { ...november, startAtShipment: true },
   );
   await create(frame);
   const view = frame.getByRole('region', { name: '发货本地核对' });
@@ -261,12 +261,22 @@ test('当月发货可查看且能取得并保留上月计算快照', async (t) =
   await expect(view.getByRole('status', { name: '计算快照状态' })).toContainText(
     '2026-10-31 快照已进入评估',
   );
-  await view.getByRole('button', { name: '读取 2026-10 计算快照', exact: true }).click();
+  const refresh = frame.locator('.dc-page-head').getByRole('button', { name: '刷新', exact: true });
+  await expect(view.getByRole('button', { name: /读取.*计算快照/ })).toHaveCount(0);
+  const refreshStart = calls.length;
+  await refresh.click();
   await expect(view.getByLabel('数据截止日')).toHaveValue('2026-10-31');
   await expect(view.getByRole('status', { name: '计算快照状态' })).toContainText('已进入评估');
   await expect
     .poll(async () => (await selected(page)).shipment.calculationCutoff)
     .toBe('2026-10-31');
+  const refreshQueries = calls.slice(refreshStart).map(({ queryId }) => queryId);
+  assert.ok(refreshQueries.includes('facts.shipment-latest'));
+  assert.ok(refreshQueries.includes('facts.shipment'));
+  assert.ok(
+    refreshQueries.every((queryId) => /^facts\.shipment(?:[.-]|$)/.test(queryId)),
+    refreshQueries.join(', '),
+  );
   await view.getByLabel('数据截止日').fill('2026-11-16');
   await view.getByRole('button', { name: '同步实际发货', exact: true }).click();
   await expect(view).toContainText('当前展示月 2026-11');
@@ -292,7 +302,7 @@ test('重读失败清除旧快照，恢复页面后按保存的统计基月截�
   const view = frame.getByRole('region', { name: '发货本地核对' });
   const status = view.getByRole('status', { name: '计算快照状态' });
   await expect(view.getByLabel('数据截止日')).toHaveValue('2026-11-16');
-  const read = view.getByRole('button', { name: '读取 2026-10 计算快照', exact: true });
+  const read = frame.locator('.dc-page-head').getByRole('button', { name: '刷新', exact: true });
   await read.click();
   await expect(status).toContainText('已进入评估');
   await view.getByLabel('数据截止日').fill('2026-11-16');

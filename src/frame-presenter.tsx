@@ -183,6 +183,7 @@ const inventoryAgentPages = new Set([
   'inventory-aqkc',
   'inventory-dealer',
   'inventory-apsplan',
+  'plan-category-production',
 ]);
 
 export type FrameCopyKey =
@@ -351,7 +352,7 @@ export function mountFramePresentation(
       () => pageViews.get(page.id) ?? 'split',
     );
     const titleless = inventoryAgentPages.has(page.id);
-    const [apsToolbarAvailable, setApsToolbarAvailable] = useState(false);
+    const [pageToolbarAvailable, setPageToolbarAvailable] = useState<string>();
     const sharedToolbar =
       [
         'gea-proof',
@@ -360,15 +361,24 @@ export function mountFramePresentation(
         'inventory-aqkc',
         'inventory-dealer',
         'inventory-apsplan',
+        'plan-category-production',
       ].includes(page.id) &&
       view === 'center' &&
       space.document >=
-        (['inventory-aqkc', 'inventory-qll', 'inventory-fc', 'inventory-apsplan'].includes(page.id)
+        ([
+          'inventory-aqkc',
+          'inventory-qll',
+          'inventory-fc',
+          'inventory-apsplan',
+          'plan-category-production',
+        ].includes(page.id)
           ? 800
           : page.id === 'inventory-dealer'
             ? 920
             : 960) &&
-      (page.id !== 'inventory-apsplan' || apsToolbarAvailable);
+      (!['inventory-apsplan', 'plan-category-production'].includes(page.id) ||
+        pageToolbarAvailable === page.id) &&
+      (page.id !== 'plan-category-production' || connectionState !== 'failed');
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
     const currentCwd = useSessions((value) => (sessionId ? value.byId[sessionId]?.cwd : undefined));
@@ -524,14 +534,13 @@ export function mountFramePresentation(
           event.source === frame.current?.contentWindow &&
           event.data?.protocol === 'gea-toolbar-layout-ready'
         ) {
-          if (page.id === 'inventory-apsplan') setApsToolbarAvailable(true);
+          setPageToolbarAvailable(page.id);
           send();
         } else if (
           event.source === frame.current?.contentWindow &&
-          event.data?.protocol === 'gea-toolbar-layout-gone' &&
-          page.id === 'inventory-apsplan'
+          event.data?.protocol === 'gea-toolbar-layout-gone'
         ) {
-          setApsToolbarAvailable(false);
+          setPageToolbarAvailable(undefined);
         }
       };
       window.addEventListener('message', ready);
@@ -594,6 +603,11 @@ export function mountFramePresentation(
         return;
       const controller = new AbortController();
       let connection: PageExecutionConnection | undefined;
+      let closing: Promise<void> | undefined;
+      const closeConnection = () => {
+        if (connection && !closing) closing = currentExecution.close(connection).catch(() => {});
+        return closing;
+      };
       let reference: SessionReference | undefined;
       let disposeBridge = () => {},
         disposeQuestions = () => {},
@@ -628,8 +642,7 @@ export function mountFramePresentation(
           controller.signal,
         );
         if (!alive()) {
-          await currentExecution.close(connection);
-          connection = undefined;
+          await closeConnection();
           return;
         }
         if (page.kind === 'html') {
@@ -643,7 +656,7 @@ export function mountFramePresentation(
               if (alive()) {
                 setError(failure instanceof Error ? failure.message : String(failure));
                 setConnectionState('failed');
-                if (connection) void currentExecution.close(connection).catch(() => {});
+                void closeConnection();
               }
             },
             () => {
@@ -706,7 +719,7 @@ export function mountFramePresentation(
         if (alive()) {
           setError(failure instanceof Error ? failure.message : String(failure));
           setConnectionState('failed');
-          if (connection) void currentExecution.close(connection).catch(() => {});
+          void closeConnection();
         }
       });
       return () => {
@@ -725,11 +738,7 @@ export function mountFramePresentation(
           .catch(() => {})
           .then(async () => {
             try {
-              if (connection) {
-                const owned = connection;
-                connection = undefined;
-                await currentExecution.close(owned);
-              }
+              await closeConnection();
             } finally {
               reference?.release();
               reference = undefined;
@@ -811,20 +820,25 @@ export function mountFramePresentation(
         >
           {page.id === 'plan-category-production' && page.kind === 'html' && page.resourceId && (
             <>
-              <button
-                type="button"
-                className="gea-conversation-toolbar-action gea-conversation-toolbar-reconnect"
-                aria-label={t('pageReconnect')}
-                title={t('pageReconnect')}
-                disabled={busy || !associated || !identityReady || connectionState === 'connecting'}
-                onClick={() => {
-                  setError('');
-                  setConnectionState('connecting');
-                  setConnectionAttempt((attempt) => attempt + 1);
-                }}
-              >
-                {t(connectionState === 'connecting' ? 'pageReconnecting' : 'pageReconnect')}
-              </button>
+              {(connectionState === 'failed' ||
+                (connectionAttempt > 0 && connectionState === 'connecting')) && (
+                <button
+                  type="button"
+                  className="gea-conversation-toolbar-action gea-conversation-toolbar-reconnect"
+                  aria-label={t('pageReconnect')}
+                  title={t('pageReconnect')}
+                  disabled={
+                    busy || !associated || !identityReady || connectionState === 'connecting'
+                  }
+                  onClick={() => {
+                    setError('');
+                    setConnectionState('connecting');
+                    setConnectionAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  {t(connectionState === 'connecting' ? 'pageReconnecting' : 'pageReconnect')}
+                </button>
+              )}
               {reconnectNotice && (
                 <span className="gea-conversation-toolbar-status" role="status">
                   {t('pageReconnected')}

@@ -91,10 +91,10 @@ async function openChecks(t, products, periods, rawProducts) {
   await expect(section.getByRole('button', { name: '下载源值核对', exact: true })).toBeEnabled();
   return { ...result, section };
 }
-async function downloadRows(page, button) {
+async function downloadRows(page, button, sheet) {
   const pending = page.waitForEvent('download');
   await button.click();
-  const csv = await mpsDownloadText(await (await pending).path());
+  const csv = await mpsDownloadText(await (await pending).path(), sheet);
   const book = XLSX.read(csv, { type: 'string', raw: true });
   return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
 }
@@ -135,15 +135,13 @@ test('来源核对保留池外非零BI和计划量，池外老品不归入当前
       },
     ],
   );
-  const pool = section.getByRole('button', { name: '下载池外待补清单（4条）', exact: true });
+  const pool = section.getByRole('button', { name: '下载源值核对', exact: true });
   await expect(pool).toBeEnabled();
-  const rows = await downloadRows(page, pool);
+  const rows = await downloadRows(page, pool, '池外待补');
   assert.equal(rows.length, 4);
   assert.equal(rows.find((row) => row['产品编码'] === 'OUT')['数量'], '-2418');
   assert.equal(rows.find((row) => row['产品编码'] === 'OUTP')['计划数量'], '9');
-  await section
-    .getByRole('button', { name: '查看异常与来源明细（4条异常，共5条）', exact: true })
-    .click();
+  await section.getByRole('button', { name: '查看明细（4条异常）', exact: true }).click();
   const preview = frame.getByRole('dialog', { name: '基础核对异常与来源明细', exact: true });
   await expect(preview.locator('tbody tr')).toHaveCount(5);
   await expect(preview).toContainText('-2418');
@@ -151,7 +149,8 @@ test('来源核对保留池外非零BI和计划量，池外老品不归入当前
   await preview.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const all = await downloadRows(
     page,
-    section.getByRole('button', { name: '下载完整来源明细', exact: true }),
+    section.getByRole('button', { name: '下载源值核对', exact: true }),
+    '来源明细',
   );
   assert.equal(all.length, 5);
   const old = all.filter((row) => row['产品编码'] === 'OLD');
@@ -174,13 +173,13 @@ test(
       draft.sourceChecks.periods,
       draft.productRaw,
     );
-    const pool = section.getByRole('button', { name: '下载池外待补清单（216条）', exact: true });
+    const pool = section.getByRole('button', { name: '下载源值核对', exact: true });
     await expect(pool).toBeEnabled({ timeout: 20000 });
-    await section
-      .getByRole('button', { name: '查看异常与来源明细（216条异常，共16488条）', exact: true })
-      .click();
+    await section.getByRole('button', { name: '查看明细（216条异常）', exact: true }).click();
     const preview = frame.getByRole('dialog', { name: '基础核对异常与来源明细', exact: true });
-    await expect(preview).toContainText('共16488条，其中异常216条');
+    await expect(preview.getByRole('navigation', { name: '异常与来源明细分页' })).toContainText(
+      '共16488条',
+    );
     await expect(preview.locator('tbody tr')).toHaveCount(25);
     await expect(preview).toContainText('-2418');
     if (process.env.MPS_POOL_SCREENSHOT)
@@ -188,7 +187,7 @@ test(
     await preview.getByRole('button', { name: '下一页来源明细', exact: true }).click();
     await expect(preview.locator('tbody tr')).toHaveCount(25);
     await preview.getByRole('button', { name: '关闭弹窗', exact: true }).click();
-    const rows = await downloadRows(page, pool);
+    const rows = await downloadRows(page, pool, '池外待补');
     const actual = rows.filter((row) => row['来源'] === 'BI');
     const plan = rows.filter((row) => row['来源'] === '计划量');
     assert.equal(rows.length, 216);
@@ -199,7 +198,8 @@ test(
     assert.equal(new Set(rows.map((row) => row['产品编码'])).size, 72);
     const details = await downloadRows(
       page,
-      section.getByRole('button', { name: '下载完整来源明细', exact: true }),
+      section.getByRole('button', { name: '下载源值核对', exact: true }),
+      '来源明细',
     );
     assert.equal(details.length, 16488);
     assert.equal(details.filter((row) => row['原因'] === '不在当前产品池').length, 216);

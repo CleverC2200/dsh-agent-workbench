@@ -3,6 +3,13 @@ html body {
   --workbench-font-family:
     'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   --workbench-font-size: var(--dsh-content-font-size, 14px);
+  --workbench-list-font-size: 12px;
+  --workbench-filter-font-size: 12px;
+  --workbench-filter-line-height: 18px;
+  --workbench-kpi-title-font-size: 12px;
+  --workbench-kpi-value-font-size: 30px;
+  --workbench-kpi-unit-font-size: 12px;
+  --workbench-table-badge-font-size: 11px;
   --workbench-page: #f7f8fa;
   --workbench-surface: #ffffff;
   --workbench-subtle: #fafafa;
@@ -40,6 +47,18 @@ html body[data-ds-dark-theme] {
   background: var(--workbench-page);
   color: var(--workbench-text);
   font: var(--workbench-font-size)/1.5 var(--workbench-font-family);
+}
+
+.agent-workbench-ui :where(th, td, [role='columnheader'], [role='rowheader'], [role='cell']) {
+  font-size: var(--workbench-list-font-size);
+}
+
+.agent-workbench-ui :where(th, [role='columnheader'], [role='rowheader']) {
+  font-weight: 700;
+}
+
+.agent-workbench-ui :where(td, [role='cell']) {
+  font-weight: 400;
 }
 .agent-workbench-ui button {
   padding: 10px 14px;

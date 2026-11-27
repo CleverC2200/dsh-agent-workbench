@@ -210,7 +210,7 @@ test('explicitly enabled modification submits changed quantity and date after co
       draft: { deliveryDate: '2026-11-21', lines: [{ sku: 'SKU-1', quantity: 126 }] },
     });
     assert.equal(f.sent[0].headers['X-CSRF-Token'], 'csrf');
-    assert.match(f.document.getElementById('orderEditor').textContent, /订单修改成功/);
+    assert.match(f.document.getElementById('orderEditor').textContent, /状态：已提交/);
   } finally {
     f.dom.window.close();
   }
@@ -232,6 +232,7 @@ test('catalog additions, original SKU removal and vehicle change form one final 
     f.document.querySelector('[aria-label="NEW 增加"]').click();
     click('完成选品');
     f.document.querySelector('#orderEditor .editor-remove').click();
+    f.document.querySelector('[aria-label="确认删除商品"] button').click();
     const vehicle = f.document.querySelector('[aria-label="选择车型"]');
     assert.equal(vehicle.disabled, false);
     vehicle.value = '6.8米';
@@ -259,6 +260,7 @@ test('removing the last product cannot submit an empty order', async () => {
   const f = await fixture({ catalog: true });
   try {
     f.document.querySelector('#orderEditor .editor-remove').click();
+    f.document.querySelector('[aria-label="确认删除商品"] button').click();
     [...f.document.querySelectorAll('#orderEditor button')]
       .find((button) => button.textContent === '提交')
       .click();

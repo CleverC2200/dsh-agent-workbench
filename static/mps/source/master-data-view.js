@@ -1,3 +1,4 @@
+import { renderTablePagination } from './report-page.js';
 import { readMasterPage, resolveProductPeriod, sourceNames } from './master-data.js';
 import { canonicalBaseName } from './relations.js';
 const labels = {
@@ -92,6 +93,8 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       return () => controller.abort();
     }, [kind, productScope, month, page, attempt]);
     const sourceMonth = kind === 'products' ? state.sourceMonth : month;
+    const showProductPeriod =
+      kind === 'products' && (preview || productPeriod.adoptedMonth !== productPeriod.targetMonth);
     const columnLabels =
       kind === 'products'
         ? { ...labels, sub_category: '源大类', responsible_item: '大类' }
@@ -132,13 +135,23 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
         className: 'dc-master-dialog',
         close,
         footer: h(
-          'button',
-          {
-            disabled: !rows.length,
-            onClick: () =>
-              downloadCsv(`${sourceNames[kind]}-${sourceMonth}-第${page + 1}页.csv`, columns, rows),
-          },
-          '下载当前页',
+          react.Fragment,
+          null,
+          h('button', { disabled: state.busy, onClick: () => setAttempt(attempt + 1) }, '刷新'),
+          h(
+            'button',
+            {
+              className: 'mps-download',
+              disabled: !rows.length,
+              onClick: () =>
+                downloadCsv(
+                  `${sourceNames[kind]}-${sourceMonth}-第${page + 1}页.csv`,
+                  columns,
+                  rows,
+                ),
+            },
+            '下载当前页',
+          ),
         ),
       },
       h(
@@ -162,7 +175,7 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
             ),
           ),
       ),
-      kind === 'products' &&
+      showProductPeriod &&
         h(
           'p',
           {},
@@ -172,6 +185,7 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
         ),
       ['products', 'annual', 'transfers'].includes(kind) &&
         sourceMonth &&
+        (!showProductPeriod || (preview && sourceMonth !== productMonth)) &&
         h('p', {}, `统计月 ${sourceMonth}`),
       kind === 'products' &&
         !state.busy &&
@@ -181,21 +195,13 @@ export function createMasterData(react, { Dialog, table, downloadCsv, useMpsPart
       state.busy && h('p', { role: 'status' }, '正在读取…'),
       state.error && h('p', { role: 'alert' }, state.error),
       state.rows && table(columns, rows),
-      h(
-        'div',
-        { className: 'dc-pagination' },
-        state.rows && h('span', {}, `共${state.total}条，第${page + 1}页`),
-        h('button', { disabled: state.busy, onClick: () => setAttempt(attempt + 1) }, '刷新'),
-        h('button', { disabled: state.busy || !page, onClick: () => setPage(page - 1) }, '上一页'),
-        h(
-          'button',
-          {
-            disabled: state.busy || !state.rows || (page + 1) * 25 >= state.total,
-            onClick: () => setPage(page + 1),
-          },
-          '下一页',
-        ),
-      ),
+      renderTablePagination(h, {
+        label: sourceNames[kind],
+        page,
+        total: state.total,
+        onPageChange: setPage,
+        disabled: state.busy || !state.rows,
+      }),
     );
   };
 }

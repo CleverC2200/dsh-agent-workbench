@@ -3,6 +3,39 @@ import assert from 'node:assert/strict';
 import { salesConfirmationCard } from '../prototypes/inventory-orderfulfillment/sales-confirmation-card.mjs';
 import { salesConfirmationCard as packagedCard } from '../lib/business/inventory-orderfulfillment/sales-window/card.mjs';
 
+test('confirmed submissions are marked and expose no processing or deferral buttons', () => {
+  const input = {
+    rate: 95,
+    customer: '客户',
+    quantity: 100,
+    submission: { status: 'submitted' },
+    lines: [],
+  };
+  const card = salesConfirmationCard(input, {
+    entryUrl: 'https://fixture.invalid/entry?reference=one',
+  });
+  const text = JSON.stringify(card);
+  assert.match(text, /已提交/);
+  assert.match(text, /请勿重复提交/);
+  const buttons = [];
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.tag === 'button') buttons.push(node);
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(card);
+  assert.equal(buttons.length, 0);
+  for (const status of ['processing', 'unknown', 'failed']) {
+    const pending = JSON.stringify(
+      salesConfirmationCard(
+        { ...input, submission: { status } },
+        { entryUrl: 'https://fixture.invalid/entry?reference=one' },
+      ),
+    );
+    assert.doesNotMatch(pending, /本次提交已完成/);
+  }
+});
+
 test('shortage SKUs remain visible alongside actual instructions at any satisfaction rate', () => {
   for (const rate of [70, 95, null]) {
     const draft = {
