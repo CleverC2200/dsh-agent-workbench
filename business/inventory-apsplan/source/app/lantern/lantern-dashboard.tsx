@@ -31,6 +31,7 @@ import {
   sourceLabels,
   sourceForMetric,
   shiftDay,
+  trendUnavailableReason,
   type DashboardModule,
   type DashboardPeriod,
   type DateRange,
@@ -199,7 +200,7 @@ function metricValue(definition: MetricDefinition, observation: Observation): Me
     ...definition,
     amount: value,
     value: value === null ? '-' : displayNumber(value / valueScale(definition.unit)),
-    unit: value === null ? undefined : definition.unit,
+    unit: definition.unit,
     status:
       risk ??
       (value === null
@@ -374,23 +375,26 @@ const isoDate = (year: number, month: number, day: number) =>
 const daysInMonth = (year: number, month: number) =>
   new Date(Date.UTC(year, month, 0)).getUTCDate();
 
+function weekRange(day: string): DateRange {
+  const weekday = new Date(day + 'T00:00:00Z').getUTCDay() || 7;
+  return { from: shiftDay(day, 1 - weekday), to: shiftDay(day, 7 - weekday) };
+}
+
 function naturalWeeks(year: number, month: number) {
-  const lastDay = daysInMonth(year, month);
+  const start = isoDate(year, month, 1);
+  const end = isoDate(year, month, daysInMonth(year, month));
   const weeks = [];
-  for (let start = 1; start <= lastDay;) {
-    const thursday = new Date(Date.UTC(year, month - 1, start));
-    const weekday = thursday.getUTCDay() || 7;
-    const end = Math.min(lastDay, start + 7 - weekday);
-    thursday.setUTCDate(thursday.getUTCDate() + 4 - weekday);
+  for (let from = weekRange(start).from; from <= end; from = shiftDay(from, 7)) {
+    const thursday = new Date(shiftDay(from, 3) + 'T00:00:00Z');
     const week = Math.ceil(
       ((thursday.getTime() - Date.UTC(thursday.getUTCFullYear(), 0, 1)) / 86_400_000 + 1) / 7,
     );
     weeks.push({
       label: `W${week}`,
-      from: isoDate(year, month, start),
-      to: isoDate(year, month, end),
+      from,
+      to: shiftDay(from, 6),
+      selection: from < start ? start : from,
     });
-    start = end + 1;
   }
   return weeks;
 }
@@ -400,8 +404,7 @@ function periodRange(view: PeriodView, value: string): DateRange {
   if (view === 'year') return { from: isoDate(year, 1, 1), to: isoDate(year, 12, 31) };
   if (view === 'month')
     return { from: isoDate(year, month, 1), to: isoDate(year, month, daysInMonth(year, month)) };
-  if (view === 'week')
-    return naturalWeeks(year, month).find(({ from, to }) => from <= value && value <= to)!;
+  if (view === 'week') return weekRange(value);
   return { from: value, to: value };
 }
 
@@ -458,7 +461,7 @@ function MetricCard({
       <div className="lantern-value-row">
         <p className="lantern-value">
           <strong>{metric.value}</strong>
-          {metric.unit && <span>{metric.unit}</span>}
+          {metric.value !== '-' && metric.unit && <span>{metric.unit}</span>}
         </p>
         {metric.valueDetails && (
           <dl className="lantern-value-details">
@@ -523,8 +526,30 @@ function MetricCard({
 }
 
 type TrendPoint = { label: string; value: number };
+type TrendSlot = { range: DateRange; value: number | null };
 type HistoryEntry = { label: string; period: DashboardPeriod; facts: LanternFacts };
 type History = { entries: HistoryEntry[]; busy: boolean };
+
+const trendPageSizes = { year: 3, month: 6, week: 6, day: 6 } satisfies Record<PeriodView, number>;
+
+function trendRanges(period: DashboardPeriod, page: number): DateRange[] {
+  const size = trendPageSizes[period.view];
+  const first = Math.max(1, page * size);
+  let range = period.range;
+  const ranges: DateRange[] = [];
+  for (let index = 1; index < (page + 1) * size; index++) {
+    range = periodRange(period.view, shiftDay(range.from, -1));
+    if (index >= first) ranges.push(range);
+  }
+  return ranges;
+}
+
+function trendLabel(view: PeriodView, range: DateRange) {
+  if (view === 'year') return `${range.from.slice(0, 4)}年`;
+  if (view === 'month') return range.from.slice(0, 7);
+  if (view === 'week' && range.from !== range.to) return `${range.from} 至 ${range.to}`;
+  return range.from;
+}
 
 function useHistoricalFacts(
   timing: SelectedPeriod,
@@ -605,6 +630,8 @@ function useHistoricalFacts(
         entries.push({ label, period, facts });
         if (!controller.signal.aborted)
           setHistory({ key: queryKey, entries: [...entries], busy: true });
+        if (Object.values(facts).some((source) => source.status === 'failed' && source.restricted))
+          return;
       }
     })().then(finish, finish);
     return () => controller.abort();
@@ -675,46 +702,57 @@ function MetricTrend({
   period,
   history,
   onClose,
-  currentLabel,
+  footer,
 }: {
   id: string;
   metric: Metric;
   period: SelectedPeriod;
-  history: { points: TrendPoint[]; busy: boolean };
+  history: { slots: TrendSlot[]; busy: boolean };
   onClose: () => void;
-  currentLabel?: string;
+  footer: React.ReactNode;
 }) {
   const periodLabel = periodViews.find(({ id }) => id === period.view)?.label;
   const { busy } = history;
-  const points = history.points.map(({ label, value }) => ({
-    label,
-    value: value / valueScale(metric.unit ?? ''),
-  }));
-  if (metric.amount != null)
-    points.push({
-      label: currentLabel ?? metric.snapshot?.date ?? '本期',
-      value: metric.amount / valueScale(metric.unit ?? ''),
-    });
   const unit = metric.unit ?? '';
-  const values = points.map(({ value }) => value);
+  const points = [...history.slots, { range: period.range, value: metric.amount ?? null }].map(
+    ({ range, value }) => ({
+      label: trendLabel(period.view, range),
+      key: range.from,
+      value: value === null ? null : value / valueScale(unit),
+    }),
+  );
+  const values = points.flatMap(({ value }) => (value === null ? [] : [value]));
   const maximum = Math.max(0, ...values);
   const magnitude = Math.max(1, ...values.map(Math.abs));
   const step = unit === '%' ? 10 : 10 ** Math.floor(Math.log10(magnitude));
-  const lower = points.length ? Math.min(...values) : 0;
+  const lower = values.length ? Math.min(...values) : 0;
   const scaleMin =
     lower < 0
       ? Math.floor(lower / step) * step - step
       : Math.max(0, Math.floor(lower / step) * step - step);
   const upper = Math.ceil(maximum / step) * step + step;
-  const scaleMax = points.length
+  const scaleMax = values.length
     ? unit === '%' && maximum <= 100
       ? Math.min(100, upper)
       : upper
     : 100;
-  const positions = points.map(({ value }, index) => ({
-    x: (100 * (index + 0.5)) / points.length,
-    y: (100 * (scaleMax - value)) / (scaleMax - scaleMin || 1),
-  }));
+  const positions = points.flatMap(({ value }, index) =>
+    value === null
+      ? []
+      : [
+          {
+            index,
+            x: (100 * (index + 0.5)) / points.length,
+            y: (100 * (scaleMax - value)) / (scaleMax - scaleMin || 1),
+          },
+        ],
+  );
+  const segments: (typeof positions)[] = [];
+  for (const point of positions) {
+    const last = segments.at(-1);
+    if (last?.at(-1)?.index === point.index - 1) last.push(point);
+    else segments.push([point]);
+  }
   return (
     <section id={id} className="lantern-sales-trend" aria-labelledby={`${id}-title`}>
       <div className="lantern-trend-toolbar">
@@ -729,12 +767,8 @@ function MetricTrend({
           关闭趋势
         </button>
       </div>
-      {busy && (
-        <p className="lantern-trend-message" role="status">
-          正在读取同期数据…
-        </p>
-      )}
-      {points.length > 0 ? (
+      {busy && <p className="lantern-trend-message">正在读取趋势数据…</p>}
+      {(values.length > 0 || history.slots.length > 0) && (
         <div
           className="lantern-table-scroll"
           tabIndex={0}
@@ -743,7 +777,7 @@ function MetricTrend({
         >
           <figure
             className="lantern-trend-figure"
-            style={{ minWidth: points.length > 6 ? points.length * 84 : undefined }}
+            style={{ minWidth: points.length * (period.view === 'week' ? 94 : 72) }}
           >
             <div className="lantern-trend-chart" aria-hidden="true">
               <div className="lantern-trend-scale">
@@ -755,12 +789,17 @@ function MetricTrend({
                 ))}
               </div>
               <div className="lantern-trend-plot">
-                {positions.length > 1 && (
+                {segments.some((segment) => segment.length > 1) && (
                   <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                    <polyline
-                      points={positions.map(({ x, y }) => `${x},${y}`).join(' ')}
-                      vectorEffect="non-scaling-stroke"
-                    />
+                    {segments
+                      .filter((segment) => segment.length > 1)
+                      .map((segment) => (
+                        <polyline
+                          key={segment[0].index}
+                          points={segment.map(({ x, y }) => `${x},${y}`).join(' ')}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      ))}
                   </svg>
                 )}
                 {positions.map(({ x, y }) => (
@@ -772,31 +811,33 @@ function MetricTrend({
                 ))}
               </div>
             </div>
-            <figcaption
-              className="lantern-trend-labels"
-              style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}
-            >
-              {points.map(({ label, value }) => (
-                <span key={label}>
-                  {label}{' '}
-                  <strong>
-                    {value.toLocaleString('zh-CN', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                    {unit}
-                  </strong>
-                </span>
-              ))}
-            </figcaption>
-            {points.length === 1 && <p className="lantern-trend-message">当前仅有一个统计点。</p>}
+            <table className="lantern-trend-labels" aria-label={metric.name + '趋势数值'}>
+              <thead>
+                <tr>
+                  {points.map(({ key, label }) => (
+                    <th key={key} scope="col">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {points.map(({ key, value }) => (
+                    <td key={key}>{value === null ? '—' : displayNumber(value) + unit}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </figure>
         </div>
-      ) : (
+      )}
+      {!busy && values.length === 0 && (
         <p className="lantern-trend-message" role="status">
           当前时间视角暂无趋势数据。
         </p>
       )}
+      {footer}
     </section>
   );
 }
@@ -821,167 +862,192 @@ function MetricListTrend({
   product?: ProductFilters;
 }) {
   const [open, setOpen] = useState(false);
-  const queryIdentity = useQueryIdentity();
-  const freshness = configuredQueryFreshAfter();
-  const key = JSON.stringify([
-    period,
-    definition.key,
-    scope,
-    inventoryScope,
-    categoryView,
-    product,
-    queryIdentity,
-    freshness,
-  ]);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const interacted = useRef(false);
   const id = useId();
+  const metric = metricValue(
+    definition,
+    observe(definition.key, facts, period, scope, inventoryScope),
+  );
+  useLayoutEffect(() => {
+    if (!interacted.current) return;
+    if (open) document.getElementById(id)?.querySelector('button')?.focus();
+    else trigger.current?.focus();
+  }, [id, open]);
+
   return (
-    <div className="lantern-list-trend">
-      {open ? (
-        <ListTrendChart
-          key={key}
+    <div
+      className="lantern-list-trend"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && open) {
+          event.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        ref={trigger}
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        hidden={open}
+        onClick={() => {
+          interacted.current = true;
+          setOpen(true);
+        }}
+      >
+        查看{definition.name}趋势
+      </button>
+      {open && (
+        <HistoricalMetricTrend
           id={id}
-          definition={definition}
+          metric={metric}
           module={module}
           period={period}
-          facts={facts}
           scope={scope}
           inventoryScope={inventoryScope}
           categoryView={categoryView}
           product={product}
           onClose={() => setOpen(false)}
         />
-      ) : (
-        <button type="button" onClick={() => setOpen(true)}>
-          查看{definition.name}趋势
-        </button>
       )}
     </div>
   );
 }
 
-function ListTrendChart({
+type TrendQuery = {
+  module: DashboardModule;
+  period: SelectedPeriod;
+  metricKey: MetricKey;
+  scope?: Scope;
+  inventoryScope?: InventoryScope;
+  categoryView?: boolean;
+  product?: ProductFilters;
+};
+
+function HistoricalMetricTrend({
   id,
-  definition,
-  module,
-  period,
-  facts,
-  scope,
-  inventoryScope,
-  categoryView,
-  product,
+  metric,
+  onClose,
+  ...filters
+}: Omit<TrendQuery, 'metricKey'> & { id: string; metric: Metric; onClose: () => void }) {
+  const identity = useQueryIdentity();
+  const freshness = configuredQueryFreshAfter();
+  const query = { ...filters, metricKey: metric.key };
+  return (
+    <TrendHistoryPanel
+      key={JSON.stringify([query, identity, freshness])}
+      query={query}
+      id={id}
+      metric={metric}
+      onClose={onClose}
+    />
+  );
+}
+
+function TrendHistoryPanel({
+  id,
+  metric,
+  query,
   onClose,
 }: {
   id: string;
-  definition: MetricDefinition;
-  module: DashboardModule;
-  period: SelectedPeriod;
-  facts: LanternFacts;
-  scope: Scope;
-  inventoryScope?: InventoryScope;
-  categoryView: boolean;
-  product?: ProductFilters;
+  metric: Metric;
+  query: TrendQuery;
   onClose: () => void;
 }) {
-  const snapshotOnly = definition.key === 'openQuantity' || definition.key === 'openShortage';
-  const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(!snapshotOnly);
-  const [failure, setFailure] = useState(false);
-  const [points, setPoints] = useState<TrendPoint[]>([]);
-  const [request, setRequest] = useState(0);
-  const current = metricValue(
-    definition,
-    observe(definition.key, facts, period, scope, inventoryScope),
+  const [filters] = useState(query);
+  const { period, metricKey, scope, inventoryScope, ...request } = filters;
+  const unavailable = trendUnavailableReason(metricKey, period, inventoryScope);
+  const [batch, setBatch] = useState({ page: 0, attempt: 0 });
+  const [status, setStatus] = useState<'loading' | 'ready' | 'failed' | 'restricted'>('loading');
+  const [history, setHistory] = useState<TrendSlot[]>(() =>
+    unavailable
+      ? []
+      : trendRanges(period, 0)
+          .map((range) => ({ range, value: null }))
+          .reverse(),
   );
-  const filterKey = JSON.stringify({ scope, product, period });
   useEffect(() => {
-    if (snapshotOnly) return;
+    if (unavailable) return;
     const pending = new AbortController();
-    const { scope, product, period } = JSON.parse(filterKey) as {
-      scope: Scope;
-      product?: ProductFilters;
-      period: SelectedPeriod;
-    };
-    setLoading(true);
-    setFailure(false);
-    const pageSize = { month: 6, year: 2, week: 8, day: 8 }[period.view];
-    const ranges: DateRange[] = [];
-    let range = period.range;
-    for (let index = 0; index < (page + 1) * pageSize; index++) {
-      range = periodRange(period.view, shiftDay(range.from, -1));
-      if (index >= page * pageSize) ranges.push(range);
-    }
+    const ranges = trendRanges(period, batch.page);
     void (async () => {
       let failed = false;
       for (const range of ranges) {
         pending.signal.throwIfAborted();
         const historyPeriod = { view: period.view, range };
-        const result = await readLanternFacts({
-          module,
+        const facts = await readLanternFacts({
+          ...request,
+          only: metricKey,
           period: historyPeriod,
-          only: definition.key,
           signal: pending.signal,
           inventoryScope,
-          categoryView,
-          product,
           background: true,
         });
-        failed ||= Object.values(result).some((source) => source.status === 'failed');
-        const { value } = observe(definition.key, result, historyPeriod, scope, inventoryScope);
-        if (value !== null && !pending.signal.aborted)
-          setPoints((existing) =>
-            [
-              ...existing.filter(({ label }) => label !== range.to),
-              { label: range.to, value },
-            ].sort((a, b) => a.label.localeCompare(b.label)),
-          );
+        pending.signal.throwIfAborted();
+        const issues = Object.values(facts).filter((source) => source.status === 'failed');
+        const { value } = observe(metricKey, facts, historyPeriod, scope, inventoryScope);
+        setHistory((existing) =>
+          existing.map((slot) => (slot.range.from === range.from ? { range, value } : slot)),
+        );
+        if (issues.some((issue) => issue.restricted)) {
+          setStatus('restricted');
+          return;
+        }
+        failed ||= issues.length > 0;
       }
-      if (!pending.signal.aborted) setFailure(failed);
-    })()
-      .catch(() => {
-        if (!pending.signal.aborted) setFailure(true);
-      })
-      .finally(() => {
-        if (!pending.signal.aborted) setLoading(false);
-      });
+      setStatus(failed ? 'failed' : 'ready');
+    })().catch(() => {
+      if (!pending.signal.aborted) setStatus('failed');
+    });
     return () => pending.abort();
-  }, [
-    categoryView,
-    definition.key,
-    filterKey,
-    inventoryScope,
-    module,
-    page,
-    request,
-    snapshotOnly,
-  ]);
+  }, [batch, filters, unavailable]);
+
+  function loadEarlier() {
+    if (status !== 'ready' && status !== 'failed') return;
+    const retry = status === 'failed';
+    const page = retry ? batch.page : batch.page + 1;
+    if (!retry) {
+      const older = trendRanges(period, page)
+        .map((range) => ({ range, value: null }))
+        .reverse();
+      setHistory((existing) => [...older, ...existing]);
+    }
+    setStatus('loading');
+    setBatch({ page, attempt: batch.attempt + 1 });
+  }
 
   return (
-    <>
-      <MetricTrend
-        id={id}
-        metric={{ ...current, unit: definition.unit }}
-        history={{ points, busy: loading }}
-        period={period}
-        onClose={onClose}
-        currentLabel={current.snapshot?.date ?? period.range.to}
-      />
-      {snapshotOnly ? (
-        <p className="lantern-trend-message">未开订单来源仅提供当前快照。</p>
-      ) : (
-        <div className="lantern-trend-toolbar">
-          <p role="status">
-            {failure ? '部分期间查询失败，可重试。' : loading ? '' : '趋势按所选时间粒度统计。'}
+    <MetricTrend
+      id={id}
+      metric={metric}
+      history={{ slots: history, busy: !unavailable && status === 'loading' }}
+      period={period}
+      onClose={onClose}
+      footer={
+        unavailable ? (
+          <p className="lantern-trend-message">{unavailable}</p>
+        ) : status === 'restricted' ? (
+          <p className="lantern-trend-message" role="status">
+            当前账号或指标来源未开放所需趋势数据。
           </p>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => (failure ? setRequest(request + 1) : setPage(page + 1))}
-          >
-            {failure ? '重试这一批' : '加载更早数据'}
-          </button>
-        </div>
-      )}
-    </>
+        ) : (
+          <div className="lantern-trend-toolbar lantern-trend-actions">
+            <p role="status">
+              {status === 'failed'
+                ? '部分期间查询失败。'
+                : status === 'ready'
+                  ? `已显示 ${history.length + 1} 个统计期间`
+                  : ''}
+            </p>
+            <button type="button" aria-disabled={status === 'loading'} onClick={loadEarlier}>
+              {status === 'failed' ? '重试这一批' : '加载更早数据'}
+            </button>
+          </div>
+        )
+      }
+    />
   );
 }
 
@@ -1095,12 +1161,12 @@ function MetricCards({
         </div>
       ))}
       {active && (
-        <MetricTrend
-          key={active.key + period.range.from + period.range.to}
+        <HistoricalMetricTrend
           id={trendId}
           metric={active}
+          module={module}
           period={period}
-          history={{ points, busy: trend.busy }}
+          inventoryScope={inventoryScope}
           onClose={() => toggle(active.name, true)}
         />
       )}
@@ -2971,7 +3037,7 @@ function PeriodDatePicker({
                       key={week.from}
                       aria-pressed={currentWeek?.from === week.from}
                       disabled={week.from > latest}
-                      onClick={() => choose(year, month, Number(week.from.slice(-2)), true)}
+                      onClick={() => choose(year, month, Number(week.selection.slice(-2)), true)}
                     >
                       <strong>{week.label}</strong>{' '}
                       <span>

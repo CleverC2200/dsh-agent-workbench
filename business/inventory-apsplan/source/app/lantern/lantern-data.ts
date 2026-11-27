@@ -48,7 +48,7 @@ type Source =
 type Row = Record<string, unknown>;
 type SourceResult =
   | { status: 'ready'; rows: Row[]; date?: string }
-  | { status: 'failed'; reason: string };
+  | { status: 'failed'; reason: string; restricted: boolean };
 
 export type LanternFacts = Partial<Record<Source, SourceResult>>;
 export type Scope = {
@@ -266,6 +266,19 @@ function supported(source: Source, period: DashboardPeriod) {
   if (['cancellation', 'amendment'].includes(source))
     return ['day', 'week', 'month'].includes(period.view);
   return true;
+}
+
+export function trendUnavailableReason(
+  metric: MetricKey,
+  period: DashboardPeriod,
+  inventoryScope?: InventoryScope,
+) {
+  if (metric === 'openQuantity' || metric === 'openShortage') return '未开订单来源仅提供当前快照。';
+  if (metric === 'stockValue' && inventoryScope !== 'customer')
+    return '该库存范围暂无已确认的库存价值口径。';
+  if (metric === 'salesPlan' || metric === 'planning')
+    return period.view === 'month' ? undefined : '该指标按月统计，可切换到月度视角查看趋势。';
+  if (!supported(sourceForMetric(metric), period)) return '当前时间粒度暂无同口径的趋势数据。';
 }
 
 export async function readLanternFacts({
@@ -552,9 +565,11 @@ export async function readLanternFacts({
       } catch (error) {
         signal.throwIfAborted();
         const failure = queryFailureText(error);
+        const restricted = restrictedQuery.test(failure);
         result = {
           status: 'failed',
-          reason: restrictedQuery.test(failure)
+          restricted,
+          reason: restricted
             ? '当前账号或指标来源未开放所需数据'
             : queryTimeout.test(failure)
               ? '查询超时，可刷新重试'

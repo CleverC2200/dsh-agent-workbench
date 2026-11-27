@@ -2865,7 +2865,8 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
   const meter = dashboard.locator('[data-metric="生产计划达成率"]');
   await meter.getByRole('button').click();
   const trend = dashboard.getByRole('region', { name: '生产计划达成率趋势', exact: true });
-  await expect(trend).toContainText('上月同期');
+  await expect(trend.getByRole('columnheader', { name: '2026-09' })).toBeVisible();
+  await expect(meter).toContainText('上月同期');
   await expect(meter).toContainText('+5.00pp');
   await trend.getByRole('button', { name: '关闭趋势' }).click();
   await dashboard.getByRole('tab', { name: '日度视角', exact: true }).click();
@@ -2889,6 +2890,105 @@ test('APS 汤圆订制看板独立取数，确认切换后才加载下一模块'
     element.ownerDocument.defaultView.dispatchEvent(new Event('gea-identity-changed'));
   });
   await expect(dashboard).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('APS 汤圆趋势按当前时间粒度读取，分指标向前补齐历史', async (t) => {
+  const { frame, calls, errors } = await mount(
+    t,
+    'apsplan',
+    768,
+    ({ queryId, parameters }, result) => {
+      if (queryId !== 'lantern.production') return result;
+      if (parameters.start === '20260901' && parameters.end_exclusive === '20261001') {
+        result.rows = [];
+        return result;
+      }
+      Object.assign(result.rows[0], {
+        planned: 200,
+        actual: 180,
+        known_planned: 200,
+        known_actual: 180,
+        records: 1,
+        valid_records: 1,
+        invalid: 0,
+        source_basis: 'MES_QUANTITY',
+      });
+      return result;
+    },
+  );
+  await frame.getByRole('button', { name: '汤圆订制看板', exact: true }).click();
+  const dashboard = frame.locator('.lantern-dashboard');
+  await dashboard.getByRole('tab', { name: '生产供应链', exact: true }).click();
+  const card = dashboard.getByRole('button', { name: '生产计划达成率趋势', exact: true });
+  const trend = dashboard.getByRole('region', { name: '生产计划达成率趋势', exact: true });
+  const labels = trend.getByRole('columnheader');
+  const values = trend.getByRole('cell');
+  const load = trend.getByRole('button', { name: '加载更早数据', exact: true });
+  const currentReads = () => calls.filter(({ queryId }) => queryId === 'lantern.production');
+  const hasRead = (start, end, category) =>
+    currentReads().some(
+      ({ parameters }) =>
+        parameters.start === start &&
+        parameters.end_exclusive === end &&
+        parameters.product_category === category,
+    );
+  const expectations = [
+    ['月度视角', '2026-05', '2026-10', '20260501', '20260601', 6],
+    ['年度视角', '2024年', '2026年', '20240101', '20250101', 3],
+    ['周度视角', '2026-09-14 至 2026-09-20', '2026-10-19', '20260928', '20261005', 6],
+    ['日度视角', '2026-10-14', '2026-10-19', '20261014', '20261015', 6],
+  ];
+  for (const [name, first, last, start, end, count] of expectations) {
+    await dashboard.getByRole('tab', { name, exact: true }).click();
+    assert.equal(hasRead(start, end, '汤圆'), false);
+    await card.press('Enter');
+    await expect(load).toBeEnabled();
+    await expect(labels).toHaveCount(count);
+    await expect(labels.first()).toHaveText(first);
+    await expect(labels.last()).toHaveText(last);
+    assert.equal(hasRead(start, end, '汤圆'), true);
+    if (name === '月度视角') {
+      await expect(values.nth(4)).toHaveText('—');
+      assert.equal((await trend.locator('polyline').getAttribute('points')).split(' ').length, 4);
+      assert.equal(hasRead('20260401', '20260501', '汤圆'), false);
+      await load.press('Enter');
+      await expect(load).toBeFocused();
+      await expect(load).toBeEnabled();
+      await expect(labels).toHaveCount(12);
+      await expect(labels.first()).toHaveText('2025-11');
+      await expect(labels.last()).toHaveText('2026-10');
+      assert.equal(hasRead('20260401', '20260501', '汤圆'), true);
+    }
+    await trend.getByRole('button', { name: '关闭趋势' }).click();
+    await expect(card).toBeFocused();
+  }
+  await dashboard.getByRole('tab', { name: '月度视角', exact: true }).click();
+  await dashboard.getByRole('tab', { name: '生产计划达成率', exact: true }).click();
+  const listTrigger = dashboard.getByRole('button', {
+    name: '查看生产计划达成率趋势',
+    exact: true,
+  });
+  assert.equal(hasRead('20260401', '20260501', null), false);
+  await listTrigger.press('Space');
+  await expect(load).toBeEnabled();
+  await expect(labels).toHaveCount(6);
+  await expect(values.last()).toHaveText('90.00%');
+  assert.equal(hasRead('20260501', '20260601', null), true);
+  await load.click();
+  await expect(load).toBeEnabled();
+  await expect(labels).toHaveCount(12);
+  assert.equal(hasRead('20260401', '20260501', null), true);
+  await dashboard.getByRole('button', { name: '统计日期 2026年10月', exact: true }).click();
+  const august = dashboard.getByRole('button', { name: '8月', exact: true });
+  await august.click();
+  await august.press('Escape');
+  await expect(load).toBeEnabled();
+  await expect(labels).toHaveCount(6);
+  await expect(labels.first()).toHaveText('2026-03');
+  await expect(labels.last()).toHaveText('2026-08');
+  await load.press('Escape');
+  await expect(listTrigger).toBeFocused();
   assert.deepEqual(errors, []);
 });
 

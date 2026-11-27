@@ -1278,18 +1278,39 @@
   transform: translate(-50%, -50%);
 }
 
-.lantern-trend-labels {
-  display: grid;
-  gap: 4px;
+.lantern-table-scroll .lantern-trend-labels {
+  width: calc(100% - 38px);
+  min-width: 0;
   margin: 8px 0 0 38px;
+  table-layout: fixed;
   text-align: center;
   color: var(--workbench-muted);
   font-size: 11px;
 }
 
-.lantern-trend-labels strong {
-  display: block;
+.lantern-trend-labels thead {
+  background: transparent;
+}
+
+.lantern-trend-labels :is(th, td) {
+  padding: 0 2px;
+  border: 0;
+  overflow-wrap: anywhere;
+}
+
+.lantern-trend-labels td {
   color: var(--workbench-text);
+  font-weight: 600;
+}
+
+.lantern-trend-actions {
+  align-items: center;
+  margin-top: 8px;
+}
+
+.lantern-trend-actions button[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 @container (max-width: 540px) {
