@@ -3,7 +3,7 @@ import { compareBusinessRows } from './table-presentation.js';
 import { useStepViewField } from './step-view-state.js';
 import { createReportPage, renderTableFooter, renderTablePagination } from './report-page.js';
 import { defaultProductionCalendar, productionCalendarRule } from './production-calendar.js';
-import { odmDemandFooter, odmDemandText, odmDemandTotal, odmLineLabel } from './odm-demand.js';
+import { odmDemandFooter, odmDemandLabel, odmDemandText, odmDemandTotal } from './odm-demand.js';
 
 const offset = (month, count) => {
   const date = new Date(`${month}-01T00:00:00Z`);
@@ -309,7 +309,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                     评估版本: draft.name,
                     结果时间: stamp,
                     月份: period,
-                    基地: odmLineLabel,
+                    基地: odmDemandLabel,
                     ODM需求吨数: demand.value,
                     已知ODM需求吨数: demand.value === null ? demand.known : null,
                     ODM未计入折吨项数: demand.missing || null,
@@ -846,11 +846,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                         '车间',
                         '隧道号',
                         '隧道吨位（规格）',
-                        '产线',
                         '日标准产能（吨/日）',
                         '生产天数',
                         '月产能（吨）',
-                        '产线类型',
+                        '设备类型',
                       ],
                       lines.map((row) => {
                         const info = lineDetails.get(row.resourceId);
@@ -858,7 +857,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                           info?.workshop || '待补',
                           info?.tunnel || '待补',
                           info?.specification || '待补',
-                          info?.productionLines?.join('、') || '产线归属待补',
                           numberText(row.dailyTons),
                           row.days ?? '待补',
                           numberText(row.capacity),
@@ -871,9 +869,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             }),
           odmDemand &&
             table(
-              'ODM产线需求',
-              ['产线', '需求总量（吨）'],
-              [[odmLineLabel, odmDemandText(odmDemand, numberText)]],
+              'ODM需求汇总',
+              ['供给方式', '需求总量（吨）'],
+              [[odmDemandLabel, odmDemandText(odmDemand, numberText)]],
             ),
         ),
       ),

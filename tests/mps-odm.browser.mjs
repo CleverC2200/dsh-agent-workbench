@@ -52,20 +52,20 @@ test('第6步各产能表与下载把ODM需求单独汇总于表尾，收货与�
   for (const [name, demandColumn, expected] of [
     ['所选设备范围汇总', 2, '200'],
     ['设备范围产品占用', 5, '200'],
-    ['设备范围明细', 8, '200'],
+    ['设备范围明细', 6, '200'],
     ['基地需求与月总产能', 2, '200'],
     ['基地大类RCCP', 2, '200'],
     ['全年月度隧道利用率矩阵', 13, '155'],
   ]) {
     const table = page.getByRole('table', { name, exact: true });
     const footer = table.locator('tfoot tr');
-    await expect(footer.getByRole('rowheader', { name: 'ODM产线' })).toBeVisible();
+    await expect(footer.getByRole('rowheader', { name: 'ODM外部供应' })).toBeVisible();
     const cells = await footer.locator('th, td').allTextContents();
     assert.equal(cells[demandColumn], expected);
-    assert.deepEqual(cells.filter(Boolean), ['ODM产线', expected]);
-    await expect(table.locator('tbody')).not.toContainText('ODM产线');
+    assert.deepEqual(cells.filter(Boolean), ['ODM外部供应', expected]);
+    await expect(table.locator('tbody')).not.toContainText('ODM外部供应');
   }
-  await expect(page.getByRole('table', { name: 'ODM产线需求', exact: true })).toContainText('200');
+  await expect(page.getByRole('table', { name: 'ODM需求汇总', exact: true })).toContainText('200');
   await page.getByRole('button', { name: '甲 点心 系列明细' }).click();
   const series = page.getByRole('table', { name: 'RCCP系列明细', exact: true });
   await expect(series.locator('tfoot')).toContainText('200');
@@ -88,10 +88,10 @@ test('第6步各产能表与下载把ODM需求单独汇总于表尾，收货与�
   });
   for (const [sheet, label] of [
     ['产品占用', '名称'],
-    ['设备范围', '产线'],
+    ['设备范围', '基地'],
   ]) {
     const summary = XLSX.utils.sheet_to_json(scopeBook.Sheets[sheet], { defval: '' }).at(-1);
-    assert.equal(summary[label], 'ODM产线');
+    assert.equal(summary[label], 'ODM外部供应');
     assert.equal(summary.关联需求吨数, 200);
     assert.equal(summary.隧道利用率, '');
     assert.equal(summary.月产能吨数 ?? summary.范围月产能吨数, '');
@@ -108,7 +108,7 @@ test('第6步各产能表与下载把ODM需求单独汇总于表尾，收货与�
   await page.getByRole('button', { name: '导出ODM默认计划到货', exact: true }).click();
   const downloads = await page.evaluate(() => window.downloads);
   const capacityExport = downloads.find((item) => item.name.endsWith('产能评估报告.csv'));
-  const exportedOdm = capacityExport.rows.filter((row) => row.基地 === 'ODM产线');
+  const exportedOdm = capacityExport.rows.filter((row) => row.基地 === 'ODM外部供应');
   assert.equal(exportedOdm.find((row) => row.月份 === '2026-12').ODM需求吨数, 200);
   assert.ok(exportedOdm.every((row) => row.隧道利用率 == null && row.月产能 == null));
   const workbook = XLSX.read(await readFile(await (await download).path()), { type: 'buffer' });

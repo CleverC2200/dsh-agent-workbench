@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx-republish';
 import { mpsComputePlugin } from '../scripts/mps-compute-build.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 
-test('设备范围与产品层级在产能及报告页查看下载一致，缺产线归属保持待补', async (t) => {
+test('设备范围按基地、车间、隧道筛选，产能及报告页查看下载一致', async (t) => {
   const output = await build({
     stdin: {
       resolveDir: process.cwd(),
@@ -141,7 +141,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   let exported;
   await page.getByLabel('设备基地', { exact: true }).selectOption('甲');
   await page.getByLabel('设备车间', { exact: true }).selectOption(JSON.stringify('一车间'));
-  await page.getByLabel('设备产线', { exact: true }).selectOption(JSON.stringify('共用产线'));
+  await expect(page.getByLabel('设备产线', { exact: true })).toHaveCount(0);
   await page.getByLabel('设备隧道', { exact: true }).selectOption('R');
   await expect(page.getByRole('table', { name: '设备范围明细', exact: true })).toContainText('T1');
   exported = await downloadSheet('下载设备范围与产品占用', '产品占用');
@@ -151,12 +151,13 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
     100,
   );
   await page.getByLabel('设备车间', { exact: true }).selectOption(JSON.stringify('二车间'));
-  await expect(page.getByRole('table', { name: '设备范围明细', exact: true })).toContainText(
-    '产线归属待补',
-  );
-  await expect(page.getByRole('table', { name: '设备归属问题', exact: true })).toContainText(
-    '来源未提供独立产线',
-  );
+  const equipment = page.getByRole('table', { name: '设备范围明细', exact: true });
+  await expect(equipment).toContainText('T2');
+  await expect(equipment).not.toContainText('产线归属待补');
+  await expect(equipment.getByRole('columnheader', { name: '产线', exact: true })).toHaveCount(0);
+  await expect(equipment.getByRole('columnheader', { name: '物理资源ID' })).toHaveCount(0);
+  await expect(equipment.getByRole('columnheader', { name: '排产占用（吨）' })).toBeVisible();
+  await expect(page.getByRole('table', { name: '设备归属问题', exact: true })).toHaveCount(0);
   await page.evaluate(() => window.showStep('report'));
   const deviceDetails = page.locator('summary').filter({ hasText: '设备范围与产品占用' });
   await expect(deviceDetails).toBeVisible();
@@ -173,6 +174,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   assert.equal(exported.rows[0].关联需求吨数, 100);
   assert.equal(exported.rows[0].隧道利用率, 2);
   assert.equal(exported.rows[0].月产能吨数, 50);
+  assert.ok(!('产线' in exported.rows[0]) && !('物理资源ID' in exported.rows[0]));
   await page.evaluate(() => window.runCapacity(26));
   await expect(page.getByLabel('产品查看层级', { exact: true })).toHaveValue('category');
   await page.getByLabel('设备车间', { exact: true }).selectOption('*');
@@ -192,7 +194,7 @@ test('设备范围与产品层级在产能及报告页查看下载一致，缺�
   assert.ok(exported.rows.every((row) => row.排产状态.includes('尚未形成排产分配')));
   assert.ok(exported.rows.every((row) => row.实际占用吨数 === 0));
   await page.evaluate(() => window.runCapacity(2, false, 'zero'));
-  await expect(summary).toContainText('本轮排产已计算，实际占用为0');
+  await expect(summary).toContainText('本轮排产已计算，排产占用为0');
   await expect(summary).toContainText('0.00%');
   await page.evaluate(() => window.runCapacity(2, false, 'demand'));
   await expect(summary).toContainText('项待补');

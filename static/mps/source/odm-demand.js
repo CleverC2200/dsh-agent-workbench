@@ -1,4 +1,4 @@
-export const odmLineLabel = 'ODM产线';
+export const odmDemandLabel = 'ODM外部供应';
 
 export function odmDemandTotal(rows, { base, month, category, search } = {}) {
   let known = 0;
@@ -26,5 +26,7 @@ export function odmDemandText({ value, known }, numberText) {
 }
 
 export function odmDemandFooter(demand, column, numberText) {
-  return demand ? { label: odmLineLabel, column, value: odmDemandText(demand, numberText) } : null;
+  return demand
+    ? { label: odmDemandLabel, column, value: odmDemandText(demand, numberText) }
+    : null;
 }
