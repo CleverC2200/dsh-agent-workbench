@@ -13,6 +13,7 @@ export function createCapacityScopeView(react) {
     month,
     filters,
     showOdmDemand,
+    isDelisted,
     view,
     active,
     card,
@@ -190,10 +191,14 @@ export function createCapacityScopeView(react) {
       问题: row.reason,
       来源: row.sourceTable,
     }));
+    const unassignedProducts = selected.unassigned.filter((row) => !isDelisted(row));
     const unassignedRows = report.demandIssues
       .filter(
         (row) =>
-          row.kind === '无有效设备关联' && row.month === month && (!base || row.base === base),
+          row.kind === '无有效设备关联' &&
+          row.month === month &&
+          (!base || row.base === base) &&
+          !isDelisted(row),
       )
       .map((row) => ({
         月份: row.month,
@@ -354,11 +359,11 @@ export function createCapacityScopeView(react) {
               ),
             )
           : null,
-        selected.unassigned.length
+        unassignedProducts.length
           ? scopeTable(
               '无设备关联需求',
               ['基地', '大类', '物料组', 'SKU', '需求（吨）'],
-              selected.unassigned.map((row) => [
+              unassignedProducts.map((row) => [
                 row.base,
                 row.category,
                 row.group,

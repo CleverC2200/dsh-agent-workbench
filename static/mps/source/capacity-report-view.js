@@ -17,6 +17,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
   const ReportPage = createReportPage(react);
   return function CapacityReport({
     plan,
+    isDelisted,
     draft,
     stamp,
     filters,
@@ -130,10 +131,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
     const annualOdmDemand =
       annualOdmKnown || annualOdmMissing || odmDemand
         ? {
-            value:
-              annualOdmMissing || !report.annualSource.records || report.annualSource.error
-                ? null
-                : annualOdmKnown,
+            value: annualOdmMissing || report.annualSource.error ? null : annualOdmKnown,
             known: annualOdmKnown,
           }
         : null;
@@ -181,10 +179,15 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         byBase(row) &&
         (!filters.month || row.month === filters.month) &&
         (!filters.category || row.category === filters.category) &&
-        (!filters.search || `${row.code} ${row.name}`.includes(filters.search)),
+        (!filters.search || `${row.code} ${row.name}`.includes(filters.search)) &&
+        (row.kind !== '无有效设备关联' || !isDelisted(row)),
     );
     const shownIssues = demandIssues.filter((row) => row.month === month);
     const annualIssues = report.annualIssues.filter(byBase);
+    const defaultedAnnualDemands = annualIssues.filter((row) => row.defaultedDemand).length;
+    const odmSchedules = (plan.odmSchedules ?? []).filter(
+      (row) => row.month === month && (!filters.base || row.receiptBases.includes(filters.base)),
+    );
     const odmArrivals = (plan.odmArrivals ?? []).filter(
       (row) => !filters.base || row.base === filters.base || row.demandBase === filters.base,
     );
@@ -569,19 +572,16 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           table(
             'ODM供方SKU月度默认计划',
             ['月份', '供方口径', 'SKU', '收货基地', '默认计划到货量（件/月）', '默认计划到货吨数'],
-            (plan.odmSchedules ?? [])
-              .filter(
-                (row) =>
-                  row.month === month && (!filters.base || row.receiptBases.includes(filters.base)),
-              )
-              .map((row) => [
-                row.month,
-                'ODM默认供给，实际供方待确认',
-                row.code,
-                row.receiptBases.join('、'),
-                numberText(row.quantity),
-                numberText(row.tons),
-              ]),
+            odmSchedules.length
+              ? odmSchedules.map((row) => [
+                  row.month,
+                  'ODM默认供给，实际供方待确认',
+                  row.code,
+                  row.receiptBases.join('、'),
+                  numberText(row.quantity),
+                  numberText(row.tons),
+                ])
+              : [[month, '无计划到货', '', filters.base || '', numberText(0), numberText(0)]],
           ),
         ),
         h(
@@ -699,7 +699,14 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           h(
             'div',
             { className: 'dc-card-head mps-report-heading' },
-            h('h3', null, `年度评估缺项 · ${numberText(annualIssues.length)} 项`),
+            h(
+              'h3',
+              null,
+              `年度评估缺项 · ${numberText(annualIssues.length - defaultedAnnualDemands)} 项`,
+              defaultedAnnualDemands > 0
+                ? ` · ${numberText(defaultedAnnualDemands)} 项需求已按 0 计算`
+                : '',
+            ),
             h(
               'button',
               {
@@ -736,7 +743,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
               (rows) =>
                 table(
                   '年度评估缺项',
-                  ['基地', 'SKU', '适用月份', '待补原因', '源表 / 字段'],
+                  ['基地', 'SKU', '适用月份', '来源情况', '源表 / 字段'],
                   rows.map((row) => [
                     row.base,
                     row.code,
@@ -1008,7 +1015,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             h(
               'p',
               null,
-              '调拨采用最新来源日期的完整关系，覆盖后续评估月，允许沿已配置路径中转并逐段记录。ODM默认计划到货单列，不占内部产能。0.5调拨库存修正系数尚未确认，本轮未采用。全年未取得的需求月份及缺件吨系数保持待补。',
+              '调拨采用最新来源日期的完整关系，覆盖后续评估月，允许沿已配置路径中转并逐段记录。ODM默认计划到货单列，不占内部产能。0.5调拨库存修正系数尚未确认，本轮未采用。年度需求无有效数量时按 0 计算。年度来源读取失败和缺有效件吨系数分别列示。',
             ),
           )
         : null,

@@ -23,7 +23,7 @@ test('第6步各产能表与下载把ODM需求单独汇总于表尾，收货与�
         sample.draft.constraints.turnoverDays[0].days=6.2;
         sample.shipment.rows[0].end=30;
         sample.relations={sources:{tunnels:[],sku_capacity:[],transfers:['0','2'].map(code=>({stat_period:'2026-11',target_base:'甲',material_code:code,transfer_tag:'ODM代工品',transfer_direction:''}))}};
-        sample.evaluation.annual={referenceMonth:'2026-12',rows:[{month:'2026-12',base:'甲',code:'0',quantity:60},{month:'2027-01',base:'甲',code:'0',quantity:80},{month:'2026-12',base:'甲',code:'1',quantity:200},{month:'2026-12',base:'甲',code:'2',quantity:15}]};
+        sample.evaluation.annual={referenceMonth:'2026-12',rows:[{month:'2026-12',base:'甲',code:'0',quantity:60},{month:'2027-01',base:'甲',code:'0',quantity:80},{month:'2026-12',base:'甲',code:'1',quantity:200},{month:'2026-12',base:'甲',code:'2',quantity:15},{month:'2026-11',base:'甲',code:'1',quantity:null}]};
         const result=buildMpsWorkflow(sample.draft,sample.relations,sample.shipment,sample.evaluation);
         window.downloads=[];
         const View=createEvaluationOverview(React,{Dialog:()=>null,downloadCsv:(name,columns,rows)=>window.downloads.push({name,columns,rows})});
@@ -103,6 +103,15 @@ test('第6步各产能表与下载把ODM需求单独汇总于表尾，收货与�
   ).toBeVisible();
   const schedules = page.getByRole('table', { name: 'ODM供方SKU月度默认计划' });
   await expect(schedules.getByRole('cell', { name: '90', exact: true }).first()).toBeVisible();
+  await page.evaluate(() => window.renderStep('capacity', { month: '2026-11' }));
+  const zeroSchedule = schedules.getByRole('row').filter({ hasText: '无计划到货' });
+  await expect(zeroSchedule).toBeVisible();
+  assert.deepEqual((await zeroSchedule.locator('td').allTextContents()).slice(-2), ['0', '0']);
+  await expect(page.getByRole('heading', { name: /1 项需求已按 0 计算/ })).toBeVisible();
+  await expect(page.getByRole('table', { name: '年度评估缺项' })).toContainText('按 0 计算');
+  const annualMatrix = page.getByRole('table', { name: '全年月度隧道利用率矩阵' });
+  await expect(annualMatrix.locator('tbody tr').first().locator('td').nth(5)).toHaveText('0%');
+  await page.evaluate(() => window.renderStep('capacity'));
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出求解结果', exact: true }).click();
   await page.getByRole('button', { name: '导出ODM默认计划到货', exact: true }).click();

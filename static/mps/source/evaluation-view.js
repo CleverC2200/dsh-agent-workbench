@@ -16,6 +16,7 @@ import {
   inventoryDependencyColumns,
 } from './inventory-target-view.js';
 
+const baseSkuKey = (row) => JSON.stringify([row.base, row.code]);
 const valid = (value) => typeof value === 'number' && Number.isFinite(value);
 const displayValue = (row, field) =>
   field === 'mainPlan' && row.mainPlan === 0 && row.planMissing.length ? null : row[field];
@@ -148,6 +149,7 @@ export function planContext(plan, visible, { base, month }) {
 export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
   const CapacityReport = createCapacityReport(react, { downloadCsv, Dialog });
   const CapacityScopeView = createCapacityScopeView(react);
+  const { useSkuLabel } = createTablePresentation(react);
   const h = react.createElement;
   const plannedFields = [
     'demand',
@@ -235,6 +237,12 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
       '',
     );
     const plan = currentEvaluation?.result.plan;
+    const skuLabel = useSkuLabel();
+    const delistedPairs = react.useMemo(
+      () => new Set(plan?.rows.filter((row) => row.delisted).map(baseSkuKey)),
+      [plan],
+    );
+    const isDelisted = (row) => delistedPairs.has(baseSkuKey(row)) || skuLabel(row) === '下市';
     const festival = currentEvaluation?.result.categoryComputation?.festival;
     const stamp = currentEvaluation?.at;
     const inputScope = JSON.stringify([
@@ -948,6 +956,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         month: filters.month || draft.month,
         filters,
         showOdmDemand: step === 'capacity',
+        isDelisted,
         view,
         active,
         card,
@@ -1266,6 +1275,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
               h(CapacityReport, {
                 view,
                 plan,
+                isDelisted,
                 draft,
                 stamp,
                 filters,
