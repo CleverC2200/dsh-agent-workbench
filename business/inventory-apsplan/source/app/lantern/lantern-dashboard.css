@@ -87,9 +87,9 @@
   inset-inline-start: 0;
   box-sizing: border-box;
   width: min(360px, calc(100cqw - 36px));
-  max-height: 320px;
+  max-height: min(300px, 60vh);
   overflow: auto;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--workbench-border);
   border-radius: 12px;
   background: var(--workbench-surface);
@@ -98,8 +98,8 @@
 
 .lantern-date-options {
   display: grid;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .lantern-date-section {
@@ -128,31 +128,66 @@
   --date-columns: 7;
 }
 
-.lantern-date-section button {
-  min-height: 32px;
-  padding: 4px 0;
-  border: 1px solid transparent;
+html.aps-plugin-host .lantern-date-picker .lantern-date-section > div > button {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 2px;
+  border: 1px solid var(--workbench-border);
   border-radius: 7px;
-  font-size: 11px;
-  font-weight: 600;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
-.lantern-date-section button[aria-pressed='true'] {
-  border-color: var(--workbench-brand-soft);
+html.aps-plugin-host
+  .lantern-date-picker
+  .lantern-date-section
+  > div
+  > button[aria-pressed='true'] {
+  border-color: transparent;
   background: var(--workbench-brand-soft);
   color: var(--workbench-brand);
 }
 
-.lantern-date-section button:not(:disabled):hover {
+html.aps-plugin-host
+  .lantern-date-picker
+  .lantern-date-section
+  > div
+  > button:not(:disabled):hover {
   border-color: #efabb4;
 }
 
-.lantern-date-section button:not(:disabled):not([aria-pressed='true']):hover {
+html.aps-plugin-host
+  .lantern-date-picker
+  .lantern-date-section
+  > div
+  > button:not(:disabled):not([aria-pressed='true']):hover {
   background: var(--workbench-hover);
 }
 
+html.aps-plugin-host .lantern-date-picker .lantern-date-section > div > button:disabled {
+  opacity: 0.4;
+}
+
+html.aps-plugin-host .lantern-date-picker .lantern-date-weeks > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
 .lantern-date-weeks button span {
-  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.lantern-time-toolbar .lantern-date-picker > p {
+  font-size: 10px;
+  font-weight: 700;
 }
 
 @container (max-width: 680px) {
