@@ -7,6 +7,8 @@ import { resolve } from 'node:path';
 import { prepareFulfillmentPresentation } from '../prototypes/inventory-orderfulfillment/prepare-presentation.mjs';
 import { buildFulfillmentSalesWindow } from './build-fulfillment-sales-window.mjs';
 import { addFulfillmentPacketQueries } from '../business/inventory-orderfulfillment/packet-queries.mjs';
+import { deliveryOperationsPlugin } from '../prototypes/inventory-orderfulfillment/delivery-operations-build.mjs';
+import { addOperationsQueries } from '../business/inventory-orderfulfillment/operations-queries.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'prototypes/inventory-orderfulfillment');
@@ -14,17 +16,25 @@ const agent = resolve(root, '../dsh-agent-manage/business-resources/inventory-or
 const out = resolve(root, 'lib/business/inventory-orderfulfillment');
 const digest = (text) => createHash('sha256').update(text).digest('hex');
 const provenance = JSON.parse(await readFile(resolve(source, 'SOURCE.json'), 'utf8'));
+const operationsProvenance = JSON.parse(
+  await readFile(resolve(source, 'delivery-operations-source.json'), 'utf8'),
+);
+const operationsSha256 = digest(await readFile(resolve(source, 'delivery-operations.html')));
+if (operationsSha256 !== operationsProvenance.files['delivery-operations.html'])
+  throw Error('DELIVERY_OPERATIONS_SOURCE_MISMATCH');
 let html = (await readFile(resolve(source, 'source.html'), 'utf8')).replace(/\r\n/g, '\n');
 if (digest(html) !== provenance.sourceHtmlSha256) throw Error('PROTOTYPE_SOURCE_MISMATCH');
 html = (await readFile(resolve(source, 'presentation.html'), 'utf8')).replace(/[ \t]+$/gm, '');
 html = prepareFulfillmentPresentation(html);
 const sqlConfig =
   JSON.stringify(
-    addFulfillmentPacketQueries(
-      JSON.parse(
-        await readFile(
-          resolve(root, 'business/inventory-orderfulfillment/sql.config.json'),
-          'utf8',
+    addOperationsQueries(
+      addFulfillmentPacketQueries(
+        JSON.parse(
+          await readFile(
+            resolve(root, 'business/inventory-orderfulfillment/sql.config.json'),
+            'utf8',
+          ),
         ),
       ),
     ),
@@ -38,6 +48,7 @@ const result = await build({
   entryPoints: [resolve(source, 'live-entry.js')],
   write: false,
   bundle: true,
+  plugins: [deliveryOperationsPlugin()],
   format: 'iife',
   platform: 'browser',
   target: 'es2022',
@@ -80,6 +91,7 @@ await writeFile(
       sourceConsumerCode: provenance.consumerCode,
       consumerCode: 'order01',
       presentationSha256: digest(await readFile(resolve(source, 'presentation.html'), 'utf8')),
+      deliveryOperationsSha256: operationsSha256,
       sharedThemeSha256: digest(theme),
       stateSha256: digest(state),
       sqlConfigSha256: digest(sqlConfig),

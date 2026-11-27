@@ -110,5 +110,11 @@
       "kind": "fixture-data",
       "source": "tests/"
     }
+  ],
+  "manifests": [
+    {
+      "path": "prototypes/inventory-orderfulfillment/delivery-operations-source.json",
+      "root": "prototypes/inventory-orderfulfillment"
+    }
   ]
 }

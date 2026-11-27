@@ -708,3 +708,18 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+
+.fulfillment-dimensions.delivery-operations-active {
+  padding: 0;
+  overflow: hidden;
+}
+#deliveryOperationsPanel {
+  padding: 0;
+}
+#deliveryOperationsFrame {
+  display: block;
+  width: 100%;
+  height: max(760px, calc(100vh - 160px));
+  border: 0;
+  background: #eef2f7;
+}
