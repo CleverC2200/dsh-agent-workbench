@@ -151,6 +151,54 @@ test('base directory returns exactly the three confirmed warehouses using each w
   }
 });
 
+test('base warehouse snapshot uses authorized readiness markers and rejects invalid batches', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`
+      CREATE TABLE snapshots (
+        inv_batch_id TEXT, inv_business_date TEXT, stock_date TEXT, stat_month TEXT,
+        inv_variant_id TEXT, inv_rule_version TEXT, warehouseid TEXT
+      );
+      CREATE TABLE allowed_warehouses (warehouseid TEXT PRIMARY KEY);
+      CREATE VIEW agents_inv_branch_sku_day AS
+        SELECT s.* FROM snapshots AS s JOIN allowed_warehouses AS a USING (warehouseid);
+    `);
+    const insert = db.prepare('INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const ready = (batch, warehouse, stockDate, variant = 'WAREHOUSE_BASE:__READY__') =>
+      insert.run(
+        batch,
+        '2026-11-27',
+        stockDate,
+        '202611',
+        variant,
+        'inventory-daily-v5-20261103',
+        warehouse,
+      );
+    for (const warehouse of ['Y204', 'N436', 'A221']) ready('01', warehouse, '2026-11-26');
+    ready('02', 'Y204', '2026-11-26', 'WAREHOUSE_BASE:BRANCH_WAREHOUSE_DIRECTORY');
+    ready('03', 'Y204', null);
+    ready('04', 'Y204', '2026-11-26');
+    ready('04', 'Y204', '2026-11-26');
+    ready('05', 'A160', '2026-11-26');
+    const query = db.prepare(config.queries['base-warehouse.summary.snapshot'].request.sql);
+    const grant = db.prepare('INSERT INTO allowed_warehouses VALUES (?)');
+    assert.deepEqual(query.all(), []);
+    grant.run('A160');
+    assert.deepEqual(query.all(), []);
+    grant.run('Y204');
+    assert.equal(query.get()?.batch_id, '01');
+    grant.run('N436');
+    assert.equal(query.get()?.batch_id, '01');
+    grant.run('A221');
+    assert.equal(query.get()?.batch_id, '01');
+    ready('06', 'Y204', '2026-11-26');
+    ready('06', 'N436', '2026-11-25');
+    assert.equal(query.get()?.batch_id, '01');
+  } finally {
+    db.close();
+  }
+});
+
 test('base card totals include warehouse-total SKUs without batch rows and never include a different warehouse', () => {
   const db = new DatabaseSync(':memory:');
   try {
