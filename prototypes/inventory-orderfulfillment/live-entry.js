@@ -1,10 +1,15 @@
+import { mountDeliveryOperations } from './delivery-operations.mjs';
 import { renderSummaryDetails } from './summary-details.mjs';
 import { fulfillmentMissingReason } from './missing-reasons.mjs';
 import { mountPushSettings } from './push-settings.mjs';
 import { mountSalesConfirmation } from './sales-confirmation.mjs';
 import { mountSalesSimulation } from './sales-simulation.mjs';
 import { mountSalesConfirmationTransport } from './sales-confirmation-transport.mjs';
-import { fulfillmentCardQueries, readItemPage, startFulfillmentCardReads } from './paged-source.mjs';
+import {
+  fulfillmentCardQueries,
+  readItemPage,
+  startFulfillmentCardReads,
+} from './paged-source.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
 import { startDashboardTiming } from '../../business/shared/dashboard-timing.js';
@@ -86,6 +91,20 @@ let currentDetailData = null;
 let currentResults = null;
 let sourcePeriod = null;
 let dimension = 'deliveryDimensionPanel';
+const deliveryOperations = mountDeliveryOperations(document, {
+  config,
+  isConnected: () => connected,
+  execute: (_request, options) =>
+    call(
+      'sql',
+      {
+        queryId: options.queryId,
+        parameters: options.values,
+        freshAfter: configuredQueryFreshAfter(),
+      },
+      { signal: options.signal },
+    ),
+});
 const $ = (id) => document.getElementById(id);
 const salesSimulation = mountSalesSimulation(document);
 const salesFormal = mountSalesConfirmationTransport(document, (payload) =>
@@ -260,6 +279,12 @@ function activateTab(button) {
   }
   if (button.dataset.fulfillmentDimension) {
     dimension = button.dataset.fulfillmentDimension;
+    const operationsActive = dimension === 'deliveryOperationsPanel';
+    void deliveryOperations.show(operationsActive);
+    document.querySelector('.fulfillment-toolbar').hidden = operationsActive;
+    document
+      .querySelector('.fulfillment-dimensions')
+      .classList.toggle('delivery-operations-active', operationsActive);
     for (const group of document.querySelectorAll('.summary.fulfillment-summary')) {
       group.hidden = group.classList.contains('item-summary')
         ? dimension !== 'itemDimensionPanel'
@@ -268,7 +293,7 @@ function activateTab(button) {
           : dimension !== 'deliveryDimensionPanel';
     }
     const mainAnalysis = document.querySelector('#fulfillmentView > .fulfillment-analysis');
-    if (mainAnalysis) mainAnalysis.hidden = dimension === 'itemDimensionPanel';
+    if (mainAnalysis) mainAnalysis.hidden = operationsActive || dimension === 'itemDimensionPanel';
     for (const node of document.querySelectorAll('.delivery-filter-only'))
       node.hidden = dimension === 'warehouseDimensionPanel';
     $('warehouseProviderLabel').hidden = $('warehouseProviderFilter').hidden =
@@ -360,22 +385,22 @@ function pendingShortage(results) {
     source = get(results, 'shortage.detail');
   if (!facts || !source) return null;
   return cachedShortage(facts, source, 'pending', () => {
-  const keys = new Set(
-    facts.rows
-      .filter(
-        (r) =>
-          Number(r.detailstatus) === 10 &&
-          String(r.is_stat) === '1' &&
-          r.prapare_order_status === '备单中',
-      )
-      .map((r) => JSON.stringify([r.executeorderno, r.material_code, r.cust_code])),
-  );
-  return {
-    ...source,
-    rows: source.rows.filter((r) =>
-      keys.has(JSON.stringify([r.execution_order, r.sku, r.customer_code])),
-    ),
-  };
+    const keys = new Set(
+      facts.rows
+        .filter(
+          (r) =>
+            Number(r.detailstatus) === 10 &&
+            String(r.is_stat) === '1' &&
+            r.prapare_order_status === '备单中',
+        )
+        .map((r) => JSON.stringify([r.executeorderno, r.material_code, r.cust_code])),
+    );
+    return {
+      ...source,
+      rows: source.rows.filter((r) =>
+        keys.has(JSON.stringify([r.execution_order, r.sku, r.customer_code])),
+      ),
+    };
   });
 }
 const cachedShortage = createFulfillmentDerivedCache();
@@ -408,34 +433,34 @@ function pendingShortageSummary(result) {
 }
 function completeOrderRows(facts) {
   return cachedOrderRows(facts, null, 'orders', () => {
-  const aliases = {
-    order_no: 'cust_order_no',
-    customer_code: 'cust_code',
-    sku: 'material_code',
-    created_at: 'header_addtime',
-    customer_name: 'cust_name',
-    base: 'belong_base',
-    region: 'region_name',
-    province: 'province_region_name',
-    sales_group: 'sales_group_name',
-    channel: 'cust_type',
-    source_status: 'prapare_order_status',
-    material_name: 'material_name',
-    sales_person: 'sales_person',
-    order_person: 'order_person',
-    carrier: 'logistics_provider',
-  };
-  return {
-    ...facts,
-    rows: facts.rows
-      .filter((row) => Number(row.detailstatus) === 10 && String(row.is_stat) === '1')
-      .map((row) =>
-        Object.fromEntries(
-          Object.entries(aliases).map(([target, source]) => [target, row[source] ?? null]),
+    const aliases = {
+      order_no: 'cust_order_no',
+      customer_code: 'cust_code',
+      sku: 'material_code',
+      created_at: 'header_addtime',
+      customer_name: 'cust_name',
+      base: 'belong_base',
+      region: 'region_name',
+      province: 'province_region_name',
+      sales_group: 'sales_group_name',
+      channel: 'cust_type',
+      source_status: 'prapare_order_status',
+      material_name: 'material_name',
+      sales_person: 'sales_person',
+      order_person: 'order_person',
+      carrier: 'logistics_provider',
+    };
+    return {
+      ...facts,
+      rows: facts.rows
+        .filter((row) => Number(row.detailstatus) === 10 && String(row.is_stat) === '1')
+        .map((row) =>
+          Object.fromEntries(
+            Object.entries(aliases).map(([target, source]) => [target, row[source] ?? null]),
+          ),
         ),
-      ),
-    rejectedColumns: [],
-  };
+      rejectedColumns: [],
+    };
   });
 }
 function replaceOptions(select, choices, emptyLabel) {
@@ -1239,9 +1264,17 @@ function renderGrantedDetails(results) {
   const facts = sourceFacts;
   const shortage = pendingShortage(results);
   const comparison = (dimension) =>
-    facts ? cachedComparisons(facts, shortage, dimension, () => comparisonMetrics(
-      dimension === 'all_scope' ? facts.rows.map(row => ({ ...row, all_scope: '当前范围' })) : facts.rows,
-      dimension, shortage?.rows ?? null)) : null;
+    facts
+      ? cachedComparisons(facts, shortage, dimension, () =>
+          comparisonMetrics(
+            dimension === 'all_scope'
+              ? facts.rows.map((row) => ({ ...row, all_scope: '当前范围' }))
+              : facts.rows,
+            dimension,
+            shortage?.rows ?? null,
+          ),
+        )
+      : null;
   if (facts && dimension === 'deliveryDimensionPanel') {
     const total = comparison('all_scope')[0];
     renderCharts(calculatedMetrics(results), total, (ids) =>
@@ -1667,6 +1700,7 @@ async function loadFutureProduction() {
   }
 }
 async function load() {
+  if (dimension === 'deliveryOperationsPanel') return;
   const selected = selectedFilters();
   const key = JSON.stringify(selected);
   if (
@@ -1703,8 +1737,11 @@ async function load() {
     return;
   }
   saveView();
-  const periodRead = reader.summary('orders.source-period',
-    { end_exclusive: nextDay(shanghaiToday()) }, task.signal);
+  const periodRead = reader.summary(
+    'orders.source-period',
+    { end_exclusive: nextDay(shanghaiToday()) },
+    task.signal,
+  );
   const cardReads = startFulfillmentCardReads(reader, selected, task.signal);
   try {
     const period = await periodRead;
@@ -2029,6 +2066,7 @@ keepPageObservation(
   (value) => publish(value),
 );
 function invalidate(event) {
+  deliveryOperations.invalidate(event?.type === 'gea-identity-changed' && connected);
   filterCatalog.clear();
   filterCatalogLoaded = false;
   organizationPicker.reset();
@@ -2048,10 +2086,12 @@ for (const event of ['gea-identity-changed', 'gea-session-changing', 'pagehide']
   window.addEventListener(event, invalidate);
 window.addEventListener('gea-session-changed', () => {
   connected = true;
+  deliveryOperations.ready();
   void load();
 });
 void ready.then(() => {
   connected = true;
+  deliveryOperations.ready();
   return load();
 });
 updateSourceFilters([]);
