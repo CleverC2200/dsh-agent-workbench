@@ -17,5 +17,11 @@
       "react": ["./node_modules/@types/react"]
     }
   },
-  "include": ["app/**/*.ts", "app/**/*.tsx", "components/ui/table.tsx", "lib/utils.ts"]
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/ui/table.tsx",
+    "lib/utils.ts",
+    "../../../src/assets.d.ts"
+  ]
 }
