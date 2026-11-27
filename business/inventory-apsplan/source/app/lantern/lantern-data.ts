@@ -17,8 +17,6 @@ export type InventoryScope = 'all' | 'base' | 'branch' | 'customer';
 export type DashboardPeriod = { view: PeriodView; range: DateRange };
 export type MetricKey =
   | 'budget'
-  | 'accuracy'
-  | 'cancellation'
   | 'amendment'
   | 'salesPlan'
   | 'openQuantity'
@@ -34,7 +32,6 @@ export type MetricKey =
 type Source =
   | 'budget'
   | 'accuracy'
-  | 'cancellation'
   | 'amendment'
   | 'budgetProvince'
   | 'openOrders'
@@ -54,6 +51,7 @@ export type LanternFacts = Partial<Record<Source, SourceResult>>;
 export type Scope = {
   base?: string;
   province?: string;
+  provinces?: readonly string[];
   organization?: readonly string[];
   product?: readonly string[];
 };
@@ -76,15 +74,14 @@ export type Observation = {
 
 const config = agentSqlConfig(configuredSql);
 const sources = {
-  sales: ['accuracy', 'budget', 'amendment', 'openOrders', 'cancellation', 'budgetProvince'],
+  sales: ['accuracy', 'budget', 'amendment', 'openOrders', 'budgetProvince'],
   production: ['production', 'fulfillment', 'planning'],
   inventory: ['base', 'branch', 'customer'],
 } satisfies Record<DashboardModule, readonly Source[]>;
 
 export const sourceLabels: Record<Source, string> = {
   budget: '销售预算',
-  accuracy: '销售提报准确率',
-  cancellation: '作废率',
+  accuracy: '销售提报',
   amendment: '改单率',
   budgetProvince: '省区销售预算',
   openOrders: '未开订单量与缺货量',
@@ -95,7 +92,7 @@ export const sourceLabels: Record<Source, string> = {
   branch: '分仓库存',
   customer: '客户库存',
 };
-const lanternCategory = '汤圆';
+export const lanternCategory = '汤圆';
 const durationDay = 86_400_000;
 const compact = (day: string) => day.replaceAll('-', '');
 const monthStart = (day: string) => day.slice(0, 7) + '-01';
@@ -150,23 +147,6 @@ function queryFailureText(error: unknown): string {
 
 const restrictedQuery = /PERMISSION|DENIED|NOT_PUBLISHED|NOT_IN_DATASET|RETURN_COLUMN/;
 const queryTimeout = /\bGEA_SQL_QUERY_TIMEOUT\b|GEA SQL 查询超时|业务请求超时/;
-const temporaryQueryUnavailable =
-  /\b(?:GEA_SQL_UNAVAILABLE|PAGE_CHANNEL_UNAVAILABLE)\b|GEA SQL 查询服务暂时不可用/;
-
-function waitForCancellationRetry(signal: AbortSignal) {
-  signal.throwIfAborted();
-  return new Promise<void>((resolve, reject) => {
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, 350);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-}
 
 async function read(
   client: ReturnType<typeof createAgentQueries>,
@@ -189,7 +169,6 @@ async function read(
     if (Object.hasOwn(parameters, key)) parameters[key] = value;
   }
   const requiredColumns = resultColumns.filter((column: string) => column !== 'material_name');
-  const cancellation = id === 'lantern.cancellation' || id === 'lantern.product-cancellation';
   const priority = background ? -1 : categoryView ? 1 : undefined;
   const loadOnce = async (requestSignal: AbortSignal) => {
     if (!keyFields)
@@ -211,24 +190,7 @@ async function read(
       )
     ).rows;
   };
-  const load = async (requestSignal: AbortSignal) => {
-    try {
-      return await loadOnce(requestSignal);
-    } catch (error) {
-      requestSignal.throwIfAborted();
-      const failure = queryFailureText(error);
-      if (
-        !cancellation ||
-        background ||
-        restrictedQuery.test(failure) ||
-        !(queryTimeout.test(failure) || temporaryQueryUnavailable.test(failure))
-      )
-        throw error;
-      await waitForCancellationRetry(requestSignal);
-      return loadOnce(requestSignal);
-    }
-  };
-  if (!cacheScope) return load(signal);
+  if (!cacheScope) return loadOnce(signal);
   signal.throwIfAborted();
   const { identity, freshness } = cacheScope;
   if (identity !== configuredQueryIdentity()) throw new DOMException('Aborted', 'AbortError');
@@ -238,7 +200,7 @@ async function read(
   return pendingReads(
     key,
     async (requestSignal) => {
-      const rows = await load(requestSignal);
+      const rows = await loadOnce(requestSignal);
       requestSignal.throwIfAborted();
       if (identity !== configuredQueryIdentity()) throw new DOMException('Aborted', 'AbortError');
       if (freshness === configuredQueryFreshAfter()) {
@@ -263,8 +225,7 @@ function supported(source: Source, period: DashboardPeriod) {
       (period.view === 'month' || period.view === 'year') &&
       (period.range.to === latestBusinessDate() || shiftDay(period.range.to, 1).endsWith('-01'))
     );
-  if (['cancellation', 'amendment'].includes(source))
-    return ['day', 'week', 'month'].includes(period.view);
+  if (source === 'amendment') return ['day', 'week', 'month'].includes(period.view);
   return true;
 }
 
@@ -319,7 +280,7 @@ export async function readLanternFacts({
     const search = value.trim();
     return search ? '%' + search.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%' : null;
   };
-  const category = categoryView ? product?.category || null : lanternCategory;
+  const category = lanternCategory;
   const detail = Boolean(product && (product.level > 0 || product.group || product.sku));
   const productDimensions = {
     sku_detail: detail,
@@ -428,7 +389,6 @@ export async function readLanternFacts({
             : facts,
         );
       }
-      case 'cancellation':
       case 'amendment':
         if (categoryView)
           return ready(
@@ -510,7 +470,7 @@ export async function readLanternFacts({
                 start: from,
                 end_exclusive: end,
                 ...productionDimensions,
-                category_mode: category && category !== '未分类' ? 'equal' : 'all',
+                category_mode: 'equal',
                 category,
               },
               ['base', 'category', 'item', 'material', 'sku'],
@@ -618,6 +578,7 @@ function scoped(rows: Row[], scope: Scope) {
   return rows.filter((row) => {
     if (scope.base && row.base !== scope.base) return false;
     if (scope.province && text(row.province) !== scope.province) return false;
+    if (scope.provinces && !scope.provinces.includes(text(row.province))) return false;
     if (
       scope.product &&
       ((!Object.hasOwn(row, 'category') && !Object.hasOwn(row, 'sku')) ||
@@ -668,7 +629,7 @@ export function observe(
     })[name];
   const metric = (name: string, id: string, rows: Row[]) => derived(name, id, rows)?.value ?? null;
   if (key === 'budget') {
-    const rows = pick(scope.province ? 'budgetProvince' : 'budget');
+    const rows = pick(scope.province || scope.provinces ? 'budgetProvince' : 'budget');
     const budget = derived('销售预算达成率', 'finance', rows);
     return {
       value: budget?.value ?? null,
@@ -731,19 +692,6 @@ export function observe(
             : undefined,
     };
   }
-  if (key === 'accuracy') {
-    const rows = pick('accuracy');
-    const initial = ratio(complete(rows, 'initial_deviation'), complete(rows, 'initial_plan'));
-    const adjusted = ratio(complete(rows, 'adjusted_deviation'), complete(rows, 'adjusted_plan'));
-    return {
-      value: metric('销售提报准确率', 'sales-accuracy', rows),
-      details: [
-        ['初版需求预测准确率', initial === null ? null : 100 - initial],
-        ['纠偏版需求预测准确率', adjusted === null ? null : 100 - adjusted],
-      ],
-      note: supported('accuracy', period) ? '源表月度累计' : '该期间暂无同口径的月度累计',
-    };
-  }
   if (key === 'production') {
     const rows = pick('production');
     return {
@@ -753,17 +701,14 @@ export function observe(
     };
   }
   if (key === 'fulfillment') return { value: metric('订单满足率', 'orders', pick(key)) };
-  if (key === 'cancellation' || key === 'amendment') {
-    const result = facts[key];
-    if (key === 'cancellation' && result?.status === 'failed')
-      return { value: null, failed: true, note: result.reason };
+  if (key === 'amendment') {
     const rows = pick(key);
     const all = ratio(complete(rows, 'numerator'), complete(rows, 'denominator'));
     const sample = ratio(known(rows, 'sample_numerator'), known(rows, 'sample_denominator'));
     const partial =
       all === null ||
       (known(rows, 'invalid') ?? 0) > 0 ||
-      (key === 'amendment' && (known(rows, 'unknown_quantity') ?? 0) > 0);
+      (known(rows, 'unknown_quantity') ?? 0) > 0;
     return partial
       ? { value: sample, note: sample === null ? undefined : '可判定样本' }
       : { value: all };

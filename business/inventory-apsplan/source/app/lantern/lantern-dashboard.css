@@ -827,7 +827,7 @@ html.aps-plugin-host .lantern-date-picker .lantern-date-weeks > button {
 }
 
 .lantern-section:where([data-module='production']) .lantern-metrics {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .lantern-metrics + .lantern-metrics {
@@ -1271,27 +1271,57 @@ html.aps-plugin-host .lantern-date-picker .lantern-date-weeks > button {
 .lantern-trend-chart {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
-  height: 120px;
+  height: 168px;
 }
 
 .lantern-trend-open[data-fixed-card-height] .lantern-trend-chart {
-  height: clamp(54px, calc(var(--lantern-card-height) - 152px), 120px);
+  height: clamp(115px, calc(var(--lantern-card-height) - 124px), 168px);
+}
+
+.lantern-trend-scale,
+.lantern-trend-plot {
+  position: relative;
 }
 
 .lantern-trend-scale {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  margin-block: -8px;
   color: var(--workbench-muted);
   font-size: 10px;
 }
 
-.lantern-trend-plot {
-  position: relative;
-  border-block: 1px solid var(--workbench-border);
-  background: linear-gradient(var(--workbench-border), var(--workbench-border)) center / 100% 1px
-    no-repeat;
+.lantern-trend-scale span {
+  position: absolute;
+  inset-inline-end: 7px;
+  transform: translateY(-50%);
+}
+
+.lantern-trend-gridline,
+.lantern-trend-goal {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1px solid var(--workbench-border);
+}
+
+.lantern-trend-goal {
+  border-top: 1px dashed var(--workbench-muted);
+}
+
+.lantern-trend-goal span {
+  position: absolute;
+  inset-inline-end: 2px;
+  bottom: 2px;
+  color: var(--workbench-body);
+  background: var(--workbench-surface);
+  font-size: 10px;
+}
+
+.lantern-trend-missing {
+  position: absolute;
+  inset-block: 0;
+  display: grid;
+  place-items: center;
+  background: var(--workbench-muted-surface, #f5f6f8);
+  color: var(--workbench-body);
+  font-size: 10px;
 }
 
 .lantern-trend-plot svg {
@@ -1309,8 +1339,29 @@ html.aps-plugin-host .lantern-date-picker .lantern-date-weeks > button {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--workbench-brand);
+  border: 2px solid var(--workbench-brand);
+  background: var(--workbench-surface);
   transform: translate(-50%, -50%);
+}
+
+.lantern-trend-point > span {
+  position: absolute;
+  inset-inline-start: 50%;
+  bottom: 7px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: var(--workbench-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lantern-trend-point[data-latest] > span {
+  color: var(--workbench-brand);
+}
+
+.lantern-trend-point > span[data-below] {
+  top: 7px;
+  bottom: auto;
 }
 
 .lantern-table-scroll .lantern-trend-labels {
@@ -1360,15 +1411,57 @@ html.aps-plugin-host .lantern-date-picker .lantern-date-weeks > button {
   }
 }
 
-.lantern-list-trend {
-  margin: 12px;
-  padding: 12px;
-  border: 1px solid var(--workbench-border);
+.lantern-insight {
+  margin-block: 12px;
   border-radius: 10px;
-  background: var(--workbench-surface);
 }
 
-.lantern-list-trend button {
+.lantern-insight .lantern-trend-toolbar h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lantern-insight .lantern-trend-toolbar h3 span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--workbench-surface);
+  background: var(--workbench-brand);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lantern-insight .lantern-trend-toolbar h3 svg {
+  width: 14px;
+  height: 14px;
+}
+
+.lantern-fixed-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--workbench-body);
+  font-size: 12px;
+}
+
+.lantern-merged-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--workbench-border);
+}
+
+.lantern-merged-heading p {
+  color: var(--workbench-body);
+  font-size: 11px;
+}
+
+.lantern-insight button {
   padding: 6px 10px;
   border: 1px solid var(--workbench-border);
   border-radius: 6px;
@@ -1376,6 +1469,6 @@ html.aps-plugin-host .lantern-date-picker .lantern-date-weeks > button {
   color: var(--workbench-text);
 }
 
-.lantern-list-trend li + li {
+.lantern-insight li + li {
   margin-top: 4px;
 }
