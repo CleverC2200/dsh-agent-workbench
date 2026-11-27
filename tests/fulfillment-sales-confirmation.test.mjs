@@ -28,6 +28,35 @@ const order = {
     },
   ],
 };
+
+test('manual repush clearly reports an earlier order submission instead of claiming a new card was sent', async () => {
+  let calls = 0;
+  const { dom, d, ui, click } = fixture(undefined, {
+    configuration: async () => ({ available: true, mode: 'sales' }),
+    notify: async () => {
+      calls++;
+      return {
+        status: 'resolved',
+        duplicatePrevented: true,
+        submission: { status: 'submitted', label: '已提交' },
+        message: '该执行单已有OMS提交成功记录，未重复发卡。',
+      };
+    },
+  });
+  ui.open(order);
+  await new Promise((resolve) => setImmediate(resolve));
+  click('发送到飞书群');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(d.body.textContent, /该执行单已有OMS提交成功记录，未重复发卡/);
+  assert.doesNotMatch(d.body.textContent, /确认卡片已发送/);
+  const send = [...d.querySelectorAll('button')].find(
+    (button) => button.textContent === '未重复发卡',
+  );
+  assert.equal(send.disabled, true);
+  send.click();
+  assert.equal(calls, 1);
+  dom.window.close();
+});
 function fixture(simulation, formal) {
   const dom = new JSDOM(
     '<button id="open">销售确认</button><div id="salesConfirmOverlay" hidden><section class="confirmation-dialog" role="dialog" aria-modal="true"><header><h2 id="salesConfirmTitle"></h2><p id="salesConfirmOrder"></p><button data-close-sales-confirm>关闭</button></header><form id="salesConfirmForm"></form></section></div>',

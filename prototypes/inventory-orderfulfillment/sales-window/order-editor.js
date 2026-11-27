@@ -42,6 +42,10 @@ window.OrderShortageEditor = (() => {
     const root = document.getElementById('orderEditor'),
       snapshot = state.snapshot || {},
       capabilities = state.editor || {};
+    const submissionConfirmed =
+      capabilities.submission?.status === 'submitted' ||
+      (capabilities.modificationState === 'succeeded' &&
+        capabilities.modificationAction !== 'defer_shipment');
     const mountOwner = {};
     root.__fulfillmentEditorOwner = mountOwner;
     const original = Array.isArray(snapshot.lines) ? snapshot.lines : [];
@@ -341,6 +345,8 @@ window.OrderShortageEditor = (() => {
       return '';
     }
     function taskNotice() {
+      if (submissionConfirmed)
+        return '已提交OMS，本次提交已完成，请勿重复提交；刷新最新订单后可继续修改。';
       if (capabilities.modificationState && capabilities.reason) return capabilities.reason;
       if (state.status === 'processing') return '任务正在处理，请稍后刷新查看结果。';
       if (state.status === 'expired') return '本次确认任务已失效，请重新获取最新任务。';
@@ -798,6 +804,11 @@ window.OrderShortageEditor = (() => {
       back.replaceChildren(backIcon, backLabel);
       header.append(back, node('span'), node('span'));
       const body = node('section', undefined, 'editor-body');
+      if (submissionConfirmed) {
+        const marker = node('strong', '状态：已提交', 'editor-submission-status');
+        marker.setAttribute('role', 'status');
+        body.append(marker);
+      }
       if (state.orderRefresh && state.permissions?.canAct === true) {
         const panel = node('section', undefined, 'editor-refresh-panel');
         panel.append(node('p', state.orderRefresh.message || '请刷新最新订单后继续修改。'));
@@ -1200,15 +1211,17 @@ window.OrderShortageEditor = (() => {
         price.dataset.editorAmount = '';
         checkout.append(
           price,
-          button(
-            '提交',
-            () => {
-              modal = true;
-              render();
-            },
-            !editable,
-            'editor-primary',
-          ),
+          submissionConfirmed
+            ? node('span', '已提交')
+            : button(
+                '提交',
+                () => {
+                  modal = true;
+                  render();
+                },
+                !editable,
+                'editor-primary',
+              ),
         );
       } else if (page === 'catalog' || page === 'recommendations')
         checkout.append(

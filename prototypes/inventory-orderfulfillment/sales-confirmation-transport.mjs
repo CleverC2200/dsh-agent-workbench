@@ -16,29 +16,31 @@ export function mountSalesConfirmationTransport(document, request) {
   const key = (s) => JSON.stringify([s.orderNo, s.customerCode, s.base, s.start, s.endExclusive]);
   const alive = () => [...bindings].filter(([, binding]) => binding.button.isConnected);
   const label = (result) =>
-    result.sourceChanged
-      ? '需重新确认'
-      : result.decisions?.[0]?.action_id === 'defer_shipment'
-        ? '已暂缓'
-        : result.decisions?.[0]?.action_id === 'confirm_shipment'
-          ? '已登记确认'
-          : result.status === 'pending' && result.delivery === 'verification_required'
-            ? '发送待核实'
-            : result.status === 'pending' && result.delivery === 'failed'
-              ? '发送失败'
-              : result.status === 'pending' && result.delivery === 'queued'
-                ? '待发送'
-                : result.status === 'pending' && result.delivery === 'sending'
-                  ? '发送中'
-                  : ({
-                      pending: '待销售处理',
-                      processing: '处理中',
-                      not_requested: '未发起',
-                      expired: '已过期',
-                      cancelled: '已取消',
-                      verification_required: '结果待核实',
-                      resolved: '已处理',
-                    }[result.status] ?? '状态待核实');
+    result.submission?.label
+      ? result.submission.label
+      : result.sourceChanged
+        ? '需重新确认'
+        : result.decisions?.[0]?.action_id === 'defer_shipment'
+          ? '已暂缓'
+          : result.decisions?.[0]?.action_id === 'confirm_shipment'
+            ? '已登记确认'
+            : result.status === 'pending' && result.delivery === 'verification_required'
+              ? '发送待核实'
+              : result.status === 'pending' && result.delivery === 'failed'
+                ? '发送失败'
+                : result.status === 'pending' && result.delivery === 'queued'
+                  ? '待发送'
+                  : result.status === 'pending' && result.delivery === 'sending'
+                    ? '发送中'
+                    : ({
+                        pending: '待销售处理',
+                        processing: '处理中',
+                        not_requested: '未发起',
+                        expired: '已过期',
+                        cancelled: '已取消',
+                        verification_required: '结果待核实',
+                        resolved: '已处理',
+                      }[result.status] ?? '状态待核实');
   async function configuration(fresh = false) {
     if (fresh) availability = undefined;
     if (!availability) {
@@ -205,6 +207,7 @@ export function mountSalesConfirmationTransport(document, request) {
       return {
         status: label(result),
         details: [
+          ...(result.message ? [result.message] : []),
           ...(result.sourceChanged ? ['当前数据已变化，下面记录对应之前的订单快照。'] : []),
           ...(result.decisions ?? []).map(
             (d) =>

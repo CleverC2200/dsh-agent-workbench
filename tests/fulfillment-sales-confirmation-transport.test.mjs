@@ -12,6 +12,31 @@ const selection = (row) => ({
   base: row.base,
   ...period,
 });
+
+test('a cross-card submission receipt takes precedence over a changed snapshot and does not expose task links', async (t) => {
+  const dom = new JSDOM('<button id="status"></button>');
+  const receipt = {
+    status: 'resolved',
+    sourceChanged: true,
+    duplicatePrevented: true,
+    submission: { status: 'submitted', label: '已提交' },
+    message: '该执行单已有OMS提交成功记录，未重复发卡。',
+  };
+  const transport = mountSalesConfirmationTransport(dom.window.document, async (request) => {
+    if (request.operation === 'capabilities') return { available: true };
+    if (request.operation === 'lookup_batch')
+      return { records: request.selections.map((s) => ({ selection: s, ...receipt })) };
+    return receipt;
+  });
+  t.after(() => {
+    transport.clear();
+    dom.window.close();
+  });
+  transport.watch(dom.window.document.getElementById('status'), a, period);
+  await until(() => dom.window.document.getElementById('status').textContent === '已提交');
+  assert.match((await transport.history(a, period)).details, /未重复发卡/);
+  assert.equal((await transport.notify({ ...a, ...period })).duplicatePrevented, true);
+});
 async function until(check) {
   for (let i = 0; i < 60; i++) {
     if (check()) return;

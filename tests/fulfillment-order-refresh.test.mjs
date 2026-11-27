@@ -15,6 +15,8 @@ async function fixture({
   version = 'v1',
   canAct = true,
   unknown = false,
+  readAfterSubmitFails = false,
+  priorOrderSubmission = false,
 } = {}) {
   const dom = new JSDOM(html, {
     runScripts: 'outside-only',
@@ -36,6 +38,14 @@ async function fixture({
   };
   const sent = [],
     reads = [];
+  if (priorOrderSubmission)
+    state.editor = {
+      editable: false,
+      canSubmit: false,
+      omsModificationAvailable: false,
+      submission: { status: 'submitted', label: '已提交' },
+      reason: '该执行单已有提交成功记录，请打开OMS最新版本的任务继续修改。',
+    };
   dom.window.fetch = async (url, options = {}) => {
     if (options.method === 'POST') {
       const body = JSON.parse(options.body);
@@ -63,6 +73,7 @@ async function fixture({
       };
     }
     reads.push(url);
+    if (readAfterSubmitFails && sent.length) throw Error('读取最新状态失败');
     return { ok: true, json: async () => structuredClone(state) };
   };
   dom.window.eval(scripts);
@@ -73,6 +84,21 @@ const button = (f, text) =>
   [...f.dom.window.document.querySelectorAll('#orderEditor button')].find(
     (b) => b.textContent === text,
   );
+
+test('a different old card displays the order-level submitted marker without sending another modification', async () => {
+  const f = await fixture({ id: 'another-card', priorOrderSubmission: true });
+  try {
+    assert.equal(f.state.status, 'pending');
+    assert.match(
+      f.dom.window.document.querySelector('.editor-submission-status').textContent,
+      /已提交/,
+    );
+    assert.equal(button(f, '提交'), undefined);
+    assert.equal(f.sent.length, 0);
+  } finally {
+    f.dom.window.close();
+  }
+});
 async function submit(f, quantity, date) {
   const q = f.dom.window.document.querySelector('#orderEditor input[type="number"]');
   q.value = String(quantity);
@@ -94,6 +120,10 @@ test('success shows submitted values and refresh is GET-only until a new authori
   try {
     await submit(f, 126, '2026-11-22');
     assert.equal(f.sent.length, 1);
+    assert.match(
+      f.dom.window.document.querySelector('.editor-submission-status').textContent,
+      /已提交/,
+    );
     assert.match(
       f.dom.window.document.querySelector('.editor-refresh-panel').textContent,
       /126 箱.*2026-11-22/,
@@ -145,6 +175,7 @@ test('unknown results do not expose a second submit and refresh cannot replay a 
   try {
     await submit(f, 126, '2026-11-22');
     assert.equal(f.sent.length, 1);
+    assert.equal(f.dom.window.document.querySelector('.editor-submission-status'), null);
     assert.equal(button(f, '提交'), undefined);
     assert.equal(button(f, '继续修改数量和交期'), undefined);
     button(f, '刷新最新订单').click();
@@ -154,6 +185,28 @@ test('unknown results do not expose a second submit and refresh cannot replay a 
       f.dom.window.document.querySelector('.editor-refresh-panel').textContent,
       /结果未确认/,
     );
+  } finally {
+    f.dom.window.close();
+  }
+});
+
+test('a confirmed submission stays marked and cannot be submitted again when the following GET fails', async () => {
+  const f = await fixture({ readAfterSubmitFails: true });
+  try {
+    await submit(f, 126, '2026-11-22');
+    assert.equal(f.sent.length, 1);
+    assert.match(
+      f.dom.window.document.querySelector('.editor-submission-status').textContent,
+      /已提交/,
+    );
+    assert.match(
+      f.dom.window.document.querySelector('.editor-refresh-panel').textContent,
+      /已提交成功.*读取失败/,
+    );
+    assert.equal(button(f, '提交'), undefined);
+    button(f, '刷新最新订单').click();
+    await flush();
+    assert.equal(f.sent.length, 1);
   } finally {
     f.dom.window.close();
   }

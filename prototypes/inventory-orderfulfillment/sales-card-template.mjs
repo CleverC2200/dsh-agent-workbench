@@ -162,7 +162,11 @@ export const salesCardTemplate = {
                     ],
                     {
                       tag: 'markdown',
-                      content: conditional('section.deferred', grey('已暂缓'), grey('已处理')),
+                      content: conditional(
+                        'section.hasStatusLabel',
+                        grey('${section.statusLabel}'),
+                        conditional('section.deferred', grey('已暂缓'), grey('已处理')),
+                      ),
                     },
                   ),
                 ],

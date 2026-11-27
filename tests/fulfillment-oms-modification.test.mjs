@@ -210,7 +210,7 @@ test('explicitly enabled modification submits changed quantity and date after co
       draft: { deliveryDate: '2026-11-21', lines: [{ sku: 'SKU-1', quantity: 126 }] },
     });
     assert.equal(f.sent[0].headers['X-CSRF-Token'], 'csrf');
-    assert.match(f.document.getElementById('orderEditor').textContent, /订单修改成功/);
+    assert.match(f.document.getElementById('orderEditor').textContent, /状态：已提交/);
   } finally {
     f.dom.window.close();
   }
