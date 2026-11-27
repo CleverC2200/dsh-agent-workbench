@@ -96,8 +96,9 @@ export function createTablePresentation(react) {
     }, [draft.products, draft.productRaw]);
     return h(Context.Provider, { value: resolve }, children);
   }
+  const useSkuLabel = () => react.useContext(Context);
   function Tag({ row, participants }) {
-    const resolve = react.useContext(Context);
+    const resolve = useSkuLabel();
     const label = resolve(row, participants);
     return label ? h('span', { className: 'mps-sku-tag', 'data-label': label }, label) : null;
   }
@@ -110,7 +111,7 @@ export function createTablePresentation(react) {
       h('span', null, code),
     );
   }
-  const presentation = { Provider, Tag, Code };
+  const presentation = { Provider, Tag, Code, useSkuLabel };
   contexts.set(react, presentation);
   return presentation;
 }

@@ -19,8 +19,10 @@ test('设备范围按基地、车间、隧道筛选，产能及报告页查看�
         import {downloadCsv} from './static/mps/source/demand-confirmation.js';
         import {encodeLocalDrafts,decodeLocalDrafts} from './static/mps/source/local-draft.js';
         import {createStepViewState} from './static/mps/source/step-view-state.js';
+        import {createTablePresentation} from './static/mps/source/table-presentation.js';
         import {workflowPerformanceInput} from './tests/helpers/mps-workflow-fixture.mjs';
         const root=createRoot(document.getElementById('root'));
+        const {Provider}=createTablePresentation(React);
         window.runCapacity=(size=2,restore=false,scenario='complete')=>{
         const sample=workflowPerformanceInput(size);
         sample.draft.resources[0]={...sample.draft.resources[0],workshop:'一车间',tunnel:'T1',productionLines:['一产线','共用产线']};
@@ -38,6 +40,11 @@ test('设备范围按基地、车间、隧道筛选，产能及报告页查看�
         if(scenario==='demand') sample.draft.categoryDemand[0].quantity=null;
         if(scenario==='upstream') {delete sample.draft.categoryDemand;sample.draft.historicalIndicatorsRead={status:'failed',month:sample.draft.month,error:'历史源读取拒绝-评估上游原因完整保留'};}
         if(scenario==='zero') sample.draft.categoryDemand.forEach(row=>row.quantity=0);
+        if(scenario==='delisted') {
+          sample.draft.products[1].transfer_tag='下市';
+          sample.draft.resourceAssignments=sample.draft.resourceAssignments.filter(row=>row.code==='3');
+          sample.relations={sources:{transfers:[{stat_period:'2026-11',target_base:'甲',material_code:'0',transfer_tag:'下市品'}]}};
+        }
         const result=buildMpsWorkflow(sample.draft,sample.relations,sample.shipment,sample.evaluation);
         window.result=result;window.downloads=[];
         const View=createEvaluationOverview(React,{Dialog:()=>null,downloadCsv:(name,columns,rows)=>{window.downloads.push({name,columns,rows});return downloadCsv(name,columns,rows)}});
@@ -45,7 +52,7 @@ test('设备范围按基地、车间、隧道筛选，产能及报告页查看�
         const card=(title,body,actions)=>h('section',{className:'dc-card','aria-label':title},h('div',{className:'dc-card-head'},h('h2',null,title),actions),body);
         const table=(name,columns,rows)=>h('div',{className:'dc-table-scroll wf-table-scroll'},h('table',{'aria-label':name},h('thead',null,h('tr',null,...columns.map((c,i)=>h('th',{key:i,scope:'col'},c)))),h('tbody',null,...rows.map((r,i)=>h('tr',{key:i},...r.map((v,j)=>h('td',{key:j},v?.content??v)))))));
         const view=createStepViewState();
-        window.showStep=(step,filters={month:scenario==='reference'?'':'2026-12'})=>root.render(h(View,{view,step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters,table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}}));
+        window.showStep=(step,filters={month:scenario==='reference'?'':'2026-12'})=>root.render(h(Provider,{draft:sample.draft},h(View,{view,step,draft:sample.draft,currentEvaluation:{at:'验收时间',result},filters,table,card,numberText:value=>value===null?'待补':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(value),onExecute(){}})));
         window.showStep('capacity');};window.runCapacity(2,localStorage.getItem('capacityDraft')!==null);`,
     },
     plugins: [await mpsComputePlugin()],
@@ -212,6 +219,26 @@ test('设备范围按基地、车间、隧道筛选，产能及报告页查看�
       page.locator('.dc-card-head').getByRole('button', { name: label, exact: true }),
     ).toBeVisible();
   }
+
+  await page.evaluate(() => window.runCapacity(4, false, 'delisted'));
+  const unassigned = page.getByRole('table', { name: '无设备关联需求', exact: true });
+  await expect(unassigned.locator('tbody tr')).toHaveCount(1);
+  await expect(unassigned.locator('tbody tr td').nth(3)).toHaveText('2');
+  exported = await downloadSheet('下载设备范围与产品占用', '无设备关联需求');
+  assert.deepEqual(
+    exported.rows.map((row) => row.SKU),
+    ['2'],
+  );
+  await page.getByText('查看2026-12缺项明细 1项', { exact: true }).click();
+  const unassignedIssues = page.getByRole('table', { name: '需求与折吨缺项', exact: true });
+  await expect(unassignedIssues.locator('tbody tr')).toHaveCount(1);
+  await expect(unassignedIssues.locator('tbody tr td').nth(2)).toHaveText('2 产品A');
+  await page.getByRole('button', { name: '导出需求与折吨缺项', exact: true }).click();
+  const unassignedExport = await page.evaluate(() => window.downloads.at(-1));
+  assert.deepEqual(
+    unassignedExport.rows.map((row) => row.产品编码),
+    ['2'],
+  );
 
   await page.evaluate(() => window.runCapacity(2, false, 'movement'));
   await expect(summary).toContainText('本轮排产已计算');
