@@ -1161,10 +1161,8 @@ test('MPS explicit leaf quantities and share history drive the same inventory an
   ).toBeVisible();
   await expect(capacity.getByRole('region', { name: '缺口明细', exact: true })).toBeVisible();
   const rccpReport = capacity.getByRole('table', { name: '基地大类RCCP', exact: true });
-  await expect(rccpReport.getByRole('columnheader')).toHaveCount(10);
-  await expect(
-    rccpReport.getByRole('columnheader', { name: 'ODM需求（吨，不占产能）', exact: true }),
-  ).toBeVisible();
+  await expect(rccpReport.getByRole('columnheader')).toHaveCount(9);
+  await expect(rccpReport.getByRole('columnheader', { name: '2026-12需求（吨）' })).toBeVisible();
   await rccpReport.getByRole('button', { name: '郑州 汤圆 系列明细', exact: true }).click();
   await expect(rccpReport.getByRole('table', { name: 'RCCP系列明细', exact: true })).toContainText(
     '产能配额',

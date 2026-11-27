@@ -947,6 +947,7 @@ export function createEvaluationOverview(react, { downloadCsv, Dialog }) {
         plan,
         month: filters.month || draft.month,
         filters,
+        showOdmDemand: step === 'capacity',
         view,
         active,
         card,

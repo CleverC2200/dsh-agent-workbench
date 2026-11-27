@@ -3,6 +3,7 @@ import { renderTablePagination } from './report-page.js';
 import { selectCapacityScope } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { useStepViewField } from './step-view-state.js';
 import { createCalculationHelp } from './calculation-help.js';
+import { odmDemandFooter, odmDemandTotal, odmLineLabel } from './odm-demand.js';
 
 export function createCapacityScopeView(react) {
   const h = react.createElement;
@@ -11,6 +12,7 @@ export function createCapacityScopeView(react) {
     plan,
     month,
     filters,
+    showOdmDemand,
     view,
     active,
     card,
@@ -49,6 +51,10 @@ export function createCapacityScopeView(react) {
       : '';
     const scope = { month, base, workshop, line, resourceId };
     const selected = selectCapacityScope(report, scope, level);
+    const odmDemand =
+      showOdmDemand && workshop === undefined && line === undefined && !resourceId
+        ? odmDemandTotal(report.productDetails, { ...filters, base, month })
+        : null;
     const label = [
       base || '全国',
       workshop === '' ? '车间归属待补' : workshop,
@@ -80,8 +86,8 @@ export function createCapacityScopeView(react) {
         [field]: value,
       }));
     };
-    const scopeTable = (name, columns, rows) =>
-      react.cloneElement(table(name, columns, rows), {
+    const scopeTable = (name, columns, rows, footer) =>
+      react.cloneElement(table(name, columns, rows, undefined, footer), {
         role: 'region',
         'aria-label': `${name}滚动区`,
         tabIndex: 0,
@@ -220,8 +226,37 @@ export function createCapacityScopeView(react) {
       downloadWorkbook(
         `${month}-设备范围与产品占用.xlsx`,
         [
-          ['产品占用', exportRows],
-          ['设备范围', equipmentRows],
+          [
+            '产品占用',
+            odmDemand
+              ? [
+                  ...exportRows,
+                  {
+                    ...scopeColumns,
+                    名称: odmLineLabel,
+                    关联需求吨数: odmDemand.value,
+                    已知关联需求吨数: odmDemand.value === null ? odmDemand.known : null,
+                    待补需求项数: odmDemand.missing || null,
+                  },
+                ]
+              : exportRows,
+          ],
+          [
+            '设备范围',
+            odmDemand
+              ? [
+                  ...equipmentRows,
+                  {
+                    月份: month,
+                    设备范围: label,
+                    产线: odmLineLabel,
+                    关联需求吨数: odmDemand.value,
+                    已知关联需求吨数: odmDemand.value === null ? odmDemand.known : null,
+                    待补需求项数: odmDemand.missing || null,
+                  },
+                ]
+              : equipmentRows,
+          ],
           ['设备归属问题', issueRows],
           ['无设备关联需求', unassignedRows],
         ]
@@ -257,6 +292,7 @@ export function createCapacityScopeView(react) {
               scheduleState(resourceIds),
             ],
           ],
+          odmDemandFooter(odmDemand, 2, numberText),
         ),
         scopeTable(
           '设备范围产品占用',
@@ -284,6 +320,7 @@ export function createCapacityScopeView(react) {
             percent(row.occupancy),
             scheduleState(resourceIds, row),
           ]),
+          odmDemandFooter(odmDemand, 5, numberText),
         ),
         renderTablePagination(h, {
           label: '所选设备范围产品需求',
@@ -326,6 +363,7 @@ export function createCapacityScopeView(react) {
             numberText(row.实际占用吨数),
             row.排产状态,
           ]),
+          odmDemandFooter(odmDemand, 8, numberText),
         ),
         h('h3', { className: 'wf-target-heading' }, '设备归属问题'),
         scopeTable(
@@ -410,7 +448,8 @@ export function createCapacityScopeView(react) {
               (!exportRows.length &&
                 !equipmentRows.length &&
                 !issueRows.length &&
-                !unassignedRows.length),
+                !unassignedRows.length &&
+                !odmDemand),
             onClick: exportWorkbook,
           },
           '下载设备范围与产品占用',
