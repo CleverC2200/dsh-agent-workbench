@@ -1,8 +1,9 @@
 import { createCalculationHelp } from './calculation-help.js';
 import { compareBusinessRows } from './table-presentation.js';
 import { useStepViewField } from './step-view-state.js';
-import { createReportPage, renderTablePagination } from './report-page.js';
+import { createReportPage, renderTableFooter, renderTablePagination } from './report-page.js';
 import { defaultProductionCalendar, productionCalendarRule } from './production-calendar.js';
+import { odmDemandFooter, odmDemandLabel, odmDemandText, odmDemandTotal } from './odm-demand.js';
 
 const offset = (month, count) => {
   const date = new Date(`${month}-01T00:00:00Z`);
@@ -93,11 +94,20 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
     const month = filters.month || report.referenceMonth;
     const next = offset(month, 1);
     const byBase = (row) => !filters.base || row.base === filters.base;
+    const odmDetails = (report.productDetails ?? []).filter((row) => row.odm && byBase(row));
+    const odmDemand = odmDemandTotal(odmDetails, { ...filters, month });
+    const groupKey = (row) => JSON.stringify([row.month, row.base, row.category]);
+    const internalGroups = Map.groupBy(
+      (report.productDetails ?? []).filter((row) => !row.odm),
+      groupKey,
+    );
+    const isInternalGroup = (row) => !report.productDetails || internalGroups.has(groupKey(row));
     const groups = report.rccp
       .filter(
         (row) =>
           row.month === month &&
           byBase(row) &&
+          isInternalGroup(row) &&
           (!filters.category || row.category === filters.category),
       )
       .sort(compareBusinessRows);
@@ -112,6 +122,21 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
     const annualIndex = new Map(
       report.annualTotals.map((row) => [JSON.stringify([row.month, row.base]), row]),
     );
+    const annualOdm = report.fiscalMonths
+      .map((period) => annualIndex.get(JSON.stringify([period, filters.base || '全国']))?.odmDemand)
+      .filter(Boolean);
+    const annualOdmKnown = annualOdm.reduce((total, item) => total + item.known, 0);
+    const annualOdmMissing = annualOdm.some((item) => item.missing > 0);
+    const annualOdmDemand =
+      annualOdmKnown || annualOdmMissing || odmDemand
+        ? {
+            value:
+              annualOdmMissing || !report.annualSource.records || report.annualSource.error
+                ? null
+                : annualOdmKnown,
+            known: annualOdmKnown,
+          }
+        : null;
     const metric = (value) =>
       value.value === null
         ? value.missing
@@ -182,7 +207,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         (!filters.category || row.category === filters.category),
     );
     const exportRows = report.rccp
-      .filter((row) => byBase(row))
+      .filter((row) => byBase(row) && isInternalGroup(row))
       .map((row) => ({
         评估版本: draft.name,
         结果时间: stamp,
@@ -191,9 +216,9 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         大类: row.category,
         归属需求吨数: row.demand.value,
         已知归属需求吨数: row.demand.known,
-        ODM需求吨数: row.odmDemand.value,
-        已知ODM需求吨数: row.odmDemand.known,
-        ODM未计入折吨项数: row.odmDemand.missing,
+        ODM需求吨数: null,
+        已知ODM需求吨数: null,
+        ODM未计入折吨项数: null,
         无归属需求吨数: row.unassigned.value,
         已知无归属需求吨数: row.unassigned.known,
         日产吨数: row.dailyTons,
@@ -207,7 +232,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
         数据状态: dataState(row),
       }));
     const toggle = (setter, key, open) => setter((value) => ({ ...value, [key]: open }));
-    const rccpTable = (columns, rows) =>
+    const rccpTable = (columns, rows, footer) =>
       h(
         'div',
         { className: 'dc-table-scroll wf-table-scroll' },
@@ -236,8 +261,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                       : cells.map((cell, position) => h('td', { key: position }, cell)),
                   ),
                 )
-              : h('tr', null, h('td', { colSpan: columns.length }, '当前范围没有需求明细')),
+              : !footer &&
+                  h('tr', null, h('td', { colSpan: columns.length }, '当前范围没有需求明细')),
           ),
+          renderTableFooter(h, columns, footer),
         ),
       );
     const transferGroups = Map.groupBy(
@@ -273,26 +300,37 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
           'button',
           {
             className: 'mps-download',
-            disabled: !active || !exportRows.length,
-            onClick: () =>
-              downloadCsv(
-                `${draft.month}-产能评估报告.csv`,
-                Object.keys(exportRows[0] ?? {}),
-                exportRows,
-              ),
+            disabled: !active || (!exportRows.length && !odmDetails.length),
+            onClick: () => {
+              const odmRows = [...Map.groupBy(odmDetails, (row) => row.month)].map(
+                ([period, items]) => {
+                  const demand = odmDemandTotal(items);
+                  return {
+                    评估版本: draft.name,
+                    结果时间: stamp,
+                    月份: period,
+                    基地: odmDemandLabel,
+                    ODM需求吨数: demand.value,
+                    已知ODM需求吨数: demand.value === null ? demand.known : null,
+                    ODM未计入折吨项数: demand.missing || null,
+                  };
+                },
+              );
+              const rows = [...exportRows, ...odmRows];
+              downloadCsv(`${draft.month}-产能评估报告.csv`, Object.keys(rows[0] ?? {}), rows);
+            },
           },
           '导出产能评估报告',
         ),
       ),
       card(
-        '内部需求与月总产能',
+        '需求与月总产能',
         table(
           '基地需求与月总产能',
           [
             '基地',
             '物理隧道数',
-            `${month}内部需求（吨）`,
-            `${month}ODM需求（吨，不占产能）`,
+            `${month}需求（吨）`,
             '生产天数',
             '日标准产能（吨/日）',
             '月总产能（吨）',
@@ -308,7 +346,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             row.base,
             row.lines,
             metric(row.demand),
-            metric(row.odmDemand),
             row.days ?? '待补',
             numberText(row.dailyTons),
             numberText(row.capacity),
@@ -323,6 +360,8 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
               return item ? load(item) : '缺需求来源';
             }),
           ]),
+          undefined,
+          odmDemandFooter(odmDemand, 2, numberText),
         ),
       ),
       card(
@@ -334,14 +373,13 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
             [
               '基地',
               '大类',
-              `${month}归属需求（吨）`,
+              `${month}需求（吨）`,
               '日产能（吨/日）',
               '月产能（吨）',
               `${month}隧道利用率`,
               '余量（吨）',
               `${next}隧道利用率`,
               '无归属需求（吨）',
-              'ODM需求（吨，不占产能）',
             ],
             groups.flatMap((row) => {
               const key = JSON.stringify([row.month, row.base, row.category]);
@@ -372,7 +410,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                   numberText(row.margin),
                   later ? load(later) : '缺需求来源',
                   metric(row.unassigned),
-                  metric(row.odmDemand),
                 ],
                 ...(openSeries === key
                   ? [
@@ -386,7 +423,7 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                               'RCCP系列明细',
                               [
                                 '系列（物料组）',
-                                `${month}归属需求（吨）`,
+                                `${month}需求（吨）`,
                                 '占大类',
                                 '产能配额（吨）',
                                 '超配额（吨）',
@@ -394,24 +431,33 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                                 '无归属需求（吨）',
                               ],
                               [
-                                ...row.series.toSorted(compareBusinessRows).map((item) => {
-                                  const future = later?.series.find(
-                                    (other) => other.group === item.group,
-                                  );
-                                  return [
-                                    `${item.group} ${item.name}`,
-                                    metric(item.demand),
-                                    item.share === null
-                                      ? row.demand.value === 0
-                                        ? '大类需求为0'
-                                        : '大类需求未齐'
-                                      : numberText(item.share, true),
-                                    item.quota === null ? '暂不分摊' : numberText(item.quota),
-                                    item.excess === null ? '暂不计算' : numberText(item.excess),
-                                    future ? metric(future.demand) : '缺需求来源',
-                                    metric(item.unassigned),
-                                  ];
-                                }),
+                                ...row.series
+                                  .toSorted(compareBusinessRows)
+                                  .filter(
+                                    (item) =>
+                                      !report.productDetails ||
+                                      internalGroups
+                                        .get(key)
+                                        ?.some((detail) => detail.group === item.group),
+                                  )
+                                  .map((item) => {
+                                    const future = later?.series.find(
+                                      (other) => other.group === item.group,
+                                    );
+                                    return [
+                                      `${item.group} ${item.name}`,
+                                      metric(item.demand),
+                                      item.share === null
+                                        ? row.demand.value === 0
+                                          ? '大类需求为0'
+                                          : '大类需求未齐'
+                                        : numberText(item.share, true),
+                                      item.quota === null ? '暂不分摊' : numberText(item.quota),
+                                      item.excess === null ? '暂不计算' : numberText(item.excess),
+                                      future ? metric(future.demand) : '缺需求来源',
+                                      metric(item.unassigned),
+                                    ];
+                                  }),
                                 [
                                   '合计',
                                   metric(row.demand),
@@ -428,6 +474,17 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                                   metric(row.unassigned),
                                 ],
                               ],
+                              undefined,
+                              odmDemandFooter(
+                                odmDemandTotal(odmDetails, {
+                                  ...filters,
+                                  month,
+                                  base: row.base,
+                                  category: row.category,
+                                }),
+                                1,
+                                numberText,
+                              ),
                             ),
                             h(
                               'p',
@@ -435,13 +492,14 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                               '产能配额按归属需求占比分摊，仅作组合参考；无归属需求不分配产能。真实系列级产能仍需产线系列与物料组映射。',
                             ),
                           ),
-                          colSpan: 10,
+                          colSpan: 9,
                         },
                       ],
                     ]
                   : []),
               ];
             }),
+            odmDemandFooter(odmDemand, 2, numberText),
           ),
         ),
       ),
@@ -754,6 +812,8 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                       )}吨；${items.reduce((total, row) => total + (row?.demand.missing ?? 0), 0)}项月待补`,
                 ];
               }),
+              undefined,
+              odmDemandFooter(annualOdmDemand, report.fiscalMonths.length + 1, numberText),
             ),
           ),
         ),
@@ -786,11 +846,10 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                         '车间',
                         '隧道号',
                         '隧道吨位（规格）',
-                        '产线',
                         '日标准产能（吨/日）',
                         '生产天数',
                         '月产能（吨）',
-                        '产线类型',
+                        '设备类型',
                       ],
                       lines.map((row) => {
                         const info = lineDetails.get(row.resourceId);
@@ -798,7 +857,6 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                           info?.workshop || '待补',
                           info?.tunnel || '待补',
                           info?.specification || '待补',
-                          info?.productionLines?.join('、') || '产线归属待补',
                           numberText(row.dailyTons),
                           row.days ?? '待补',
                           numberText(row.capacity),
@@ -809,6 +867,12 @@ export function createCapacityReport(react, { Dialog, downloadCsv: downloadRawCs
                   : null,
               );
             }),
+          odmDemand &&
+            table(
+              'ODM需求汇总',
+              ['供给方式', '需求总量（吨）'],
+              [[odmDemandLabel, odmDemandText(odmDemand, numberText)]],
+            ),
         ),
       ),
       hasForming &&

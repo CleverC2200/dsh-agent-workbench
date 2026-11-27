@@ -2,6 +2,23 @@ import { useStepViewField } from './step-view-state.js';
 
 const pageSize = 25;
 
+export function renderTableFooter(h, columns, footer) {
+  if (!footer) return null;
+  return h(
+    'tfoot',
+    null,
+    h(
+      'tr',
+      null,
+      columns.map((_, index) =>
+        index === 0
+          ? h('th', { key: index, scope: 'row' }, footer.label)
+          : h('td', { key: index }, index === footer.column ? footer.value : null),
+      ),
+    ),
+  );
+}
+
 export function renderTablePagination(
   h,
   {

@@ -3,6 +3,7 @@ import { renderTablePagination } from './report-page.js';
 import { selectCapacityScope } from 'dsh-agent-manage/mps-compute/capacity-report';
 import { useStepViewField } from './step-view-state.js';
 import { createCalculationHelp } from './calculation-help.js';
+import { odmDemandFooter, odmDemandLabel, odmDemandTotal } from './odm-demand.js';
 
 export function createCapacityScopeView(react) {
   const h = react.createElement;
@@ -11,6 +12,7 @@ export function createCapacityScopeView(react) {
     plan,
     month,
     filters,
+    showOdmDemand,
     view,
     active,
     card,
@@ -33,27 +35,19 @@ export function createCapacityScopeView(react) {
     const workshopLines = baseLines.filter(
       (row) => workshop === undefined || row.workshop === workshop,
     );
-    const productionLines = [
-      ...new Set(
-        workshopLines.flatMap((row) => (row.productionLines.length ? row.productionLines : [''])),
-      ),
-    ];
-    const line = productionLines.includes(selection.line) ? selection.line : undefined;
-    const lineRows = workshopLines.filter(
-      (row) =>
-        line === undefined ||
-        (line === '' ? !row.productionLines.length : row.productionLines.includes(line)),
-    );
-    const resourceId = lineRows.some((row) => row.resourceId === selection.resourceId)
+    const resourceId = workshopLines.some((row) => row.resourceId === selection.resourceId)
       ? selection.resourceId
       : '';
-    const scope = { month, base, workshop, line, resourceId };
+    const scope = { month, base, workshop, resourceId };
     const selected = selectCapacityScope(report, scope, level);
+    const odmDemand =
+      showOdmDemand && workshop === undefined && !resourceId
+        ? odmDemandTotal(report.productDetails, { ...filters, base, month })
+        : null;
     const label = [
       base || '全国',
       workshop === '' ? '车间归属待补' : workshop,
-      line === '' ? '产线归属待补' : line,
-      resourceId ? selected.lines[0]?.tunnel || resourceId : '',
+      resourceId ? selected.lines[0]?.tunnel || '隧道号待补' : '',
     ]
       .filter((value) => value !== undefined && value !== '')
       .join(' / ');
@@ -64,24 +58,20 @@ export function createCapacityScopeView(react) {
     );
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(productRows.length / 25) - 1));
     const shownProducts = productRows.slice(pageIndex * 25, (pageIndex + 1) * 25);
-    const issues = report.hierarchyIssues.filter((row) =>
-      selected.lines.some((line) => line.resourceId === row.resourceId),
+    const issues = report.hierarchyIssues.filter(
+      (row) =>
+        !row.reason.startsWith('产线归属待补') &&
+        selected.lines.some((line) => line.resourceId === row.resourceId),
     );
     const change = (field, value) => {
       setPage(0);
       setSelection((current) => ({
-        ...(field === 'base'
-          ? {}
-          : field === 'workshop'
-            ? { base: current.base }
-            : field === 'line'
-              ? { base: current.base, workshop: current.workshop }
-              : current),
+        ...(field === 'base' ? {} : field === 'workshop' ? { base: current.base } : current),
         [field]: value,
       }));
     };
-    const scopeTable = (name, columns, rows) =>
-      react.cloneElement(table(name, columns, rows), {
+    const scopeTable = (name, columns, rows, footer) =>
+      react.cloneElement(table(name, columns, rows, undefined, footer), {
         role: 'region',
         'aria-label': `${name}滚动区`,
         tabIndex: 0,
@@ -148,7 +138,7 @@ export function createCapacityScopeView(react) {
           (allocation) => ids.has(allocation.resourceId) && allocation.tons > 0,
         ),
       );
-      return occupied ? '本轮排产已计算' : '本轮排产已计算，实际占用为0';
+      return occupied ? '本轮排产已计算' : '本轮排产已计算，排产占用为0';
     };
     const utilization = (demand) =>
       demand !== null && selected.capacity !== null && selected.capacity > 0
@@ -182,9 +172,7 @@ export function createCapacityScopeView(react) {
         设备范围: label,
         基地: row.base,
         车间: row.workshop || '车间归属待补',
-        产线: row.productionLines.join('、') || '产线归属待补',
         隧道号: row.tunnel || '隧道号待补',
-        物理资源ID: row.resourceId,
         日标准产能吨数: row.dailyTons,
         生产天数: row.days,
         月产能吨数: row.capacity,
@@ -198,7 +186,6 @@ export function createCapacityScopeView(react) {
     });
     const issueRows = issues.map((row) => ({
       基地: row.base,
-      物理资源ID: row.resourceId,
       名称: row.name,
       问题: row.reason,
       来源: row.sourceTable,
@@ -220,8 +207,37 @@ export function createCapacityScopeView(react) {
       downloadWorkbook(
         `${month}-设备范围与产品占用.xlsx`,
         [
-          ['产品占用', exportRows],
-          ['设备范围', equipmentRows],
+          [
+            '产品占用',
+            odmDemand
+              ? [
+                  ...exportRows,
+                  {
+                    ...scopeColumns,
+                    名称: odmDemandLabel,
+                    关联需求吨数: odmDemand.value,
+                    已知关联需求吨数: odmDemand.value === null ? odmDemand.known : null,
+                    待补需求项数: odmDemand.missing || null,
+                  },
+                ]
+              : exportRows,
+          ],
+          [
+            '设备范围',
+            odmDemand
+              ? [
+                  ...equipmentRows,
+                  {
+                    月份: month,
+                    设备范围: label,
+                    基地: odmDemandLabel,
+                    关联需求吨数: odmDemand.value,
+                    已知关联需求吨数: odmDemand.value === null ? odmDemand.known : null,
+                    待补需求项数: odmDemand.missing || null,
+                  },
+                ]
+              : equipmentRows,
+          ],
           ['设备归属问题', issueRows],
           ['无设备关联需求', unassignedRows],
         ]
@@ -242,7 +258,7 @@ export function createCapacityScopeView(react) {
             '日标准产能（吨/日）',
             '月产能（吨）',
             '隧道利用率',
-            '实际占用（吨）',
+            '排产占用（吨）',
             '排产状态',
           ],
           [
@@ -257,6 +273,7 @@ export function createCapacityScopeView(react) {
               scheduleState(resourceIds),
             ],
           ],
+          odmDemandFooter(odmDemand, 2, numberText),
         ),
         scopeTable(
           '设备范围产品占用',
@@ -268,7 +285,7 @@ export function createCapacityScopeView(react) {
             '名称',
             '关联需求（吨）',
             '隧道利用率',
-            '实际占用（吨）',
+            '排产占用（吨）',
             '范围产能占比',
             '排产状态',
           ],
@@ -284,6 +301,7 @@ export function createCapacityScopeView(react) {
             percent(row.occupancy),
             scheduleState(resourceIds, row),
           ]),
+          odmDemandFooter(odmDemand, 5, numberText),
         ),
         renderTablePagination(h, {
           label: '所选设备范围产品需求',
@@ -297,23 +315,19 @@ export function createCapacityScopeView(react) {
           [
             '基地',
             '车间',
-            '产线',
             '隧道号',
-            '物理资源ID',
             '日标准产能（吨/日）',
             '生产天数',
             '月产能（吨）',
             '关联需求（吨）',
             '隧道利用率',
-            '实际占用（吨）',
+            '排产占用（吨）',
             '排产状态',
           ],
           equipmentRows.map((row) => [
             row.基地,
             row.车间,
-            row.产线,
             row.隧道号,
-            row.物理资源ID,
             numberText(row.日标准产能吨数),
             row.生产天数 ?? '待补',
             numberText(row.月产能吨数),
@@ -326,13 +340,20 @@ export function createCapacityScopeView(react) {
             numberText(row.实际占用吨数),
             row.排产状态,
           ]),
+          odmDemandFooter(odmDemand, 6, numberText),
         ),
-        h('h3', { className: 'wf-target-heading' }, '设备归属问题'),
-        scopeTable(
-          '设备归属问题',
-          ['基地', '资源', '问题', '来源'],
-          issues.map((row) => [row.base, row.name, row.reason, row.sourceTable]),
-        ),
+        issues.length
+          ? h(
+              react.Fragment,
+              null,
+              h('h3', { className: 'wf-target-heading' }, '设备归属问题'),
+              scopeTable(
+                '设备归属问题',
+                ['基地', '资源', '问题', '来源'],
+                issues.map((row) => [row.base, row.name, row.reason, row.sourceTable]),
+              ),
+            )
+          : null,
         selected.unassigned.length
           ? scopeTable(
               '无设备关联需求',
@@ -361,7 +382,7 @@ export function createCapacityScopeView(react) {
             h(
               'p',
               null,
-              '实际占用包含调拨供给，按本轮排产分配统计。产品占比采用范围内去重后的总产能。',
+              '排产占用是本轮分配给隧道的生产吨数，包含供应给其他基地的调拨量。关联需求是该隧道可承接的需求，同一需求可关联多条隧道。',
             ),
           ),
           selector(
@@ -374,13 +395,12 @@ export function createCapacityScopeView(react) {
             (value) => change('base', value),
           ),
           encodedSelector('设备车间', 'workshop', workshop, workshops, '车间归属待补'),
-          encodedSelector('设备产线', 'line', line, productionLines, '产线归属待补'),
           selector(
             '设备隧道',
             resourceId,
             [
               ['', '全部'],
-              ...lineRows.map((row) => [
+              ...workshopLines.map((row) => [
                 row.resourceId,
                 `${row.base} / ${row.workshop || '车间待补'} / ${row.tunnel || row.name}`,
               ]),
@@ -410,7 +430,8 @@ export function createCapacityScopeView(react) {
               (!exportRows.length &&
                 !equipmentRows.length &&
                 !issueRows.length &&
-                !unassignedRows.length),
+                !unassignedRows.length &&
+                !odmDemand),
             onClick: exportWorkbook,
           },
           '下载设备范围与产品占用',

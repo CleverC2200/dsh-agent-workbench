@@ -19,7 +19,7 @@ import { createShipmentScopeNotice } from './category-demand-view.js';
 import { createProcessedDemand } from './processed-demand-view.js';
 import { demandBasisLabel } from './festival-demand.js';
 import { matchesQuantityAdjustment } from './local-draft.js';
-import { createReportPage } from './report-page.js';
+import { createReportPage, renderTableFooter } from './report-page.js';
 import {
   createInventoryTargetPanel,
   inventoryDependencyColumns,
@@ -561,7 +561,7 @@ export function createWorkflow(
       titles[step],
       active,
     );
-    const table = (name, columns, rows, renderDetail) =>
+    const table = (name, columns, rows, renderDetail, footer) =>
       h(
         'div',
         {
@@ -624,12 +624,18 @@ export function createWorkflow(
                     renderDetail?.(cells, index),
                   ),
                 )
-              : h(
-                  'tr',
-                  null,
-                  h('td', { colSpan: columns.length, className: 'wf-empty' }, '暂无记录 · 未评估'),
-                ),
+              : !footer &&
+                  h(
+                    'tr',
+                    null,
+                    h(
+                      'td',
+                      { colSpan: columns.length, className: 'wf-empty' },
+                      '暂无记录 · 未评估',
+                    ),
+                  ),
           ),
+          renderTableFooter(h, columns, footer),
         ),
       );
     const card = (name, body, actions) =>
