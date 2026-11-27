@@ -1,4 +1,5 @@
 docs/agent-inputs/apsplan-20261020/** -text whitespace=cr-at-eol,-blank-at-eof,-blank-at-eol
+prototypes/inventory-orderfulfillment/delivery-operations.html -text whitespace=cr-at-eol,-blank-at-eof,-blank-at-eol
 
 lib/business/inventory-orderfulfillment/sales-window/* text eol=lf
 lib/business/inventory-orderworkbench/metric-runtime.mjs text eol=lf
