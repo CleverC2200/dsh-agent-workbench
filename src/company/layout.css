@@ -1,3 +1,7 @@
+[data-rightbar-collapsed]:has(.gea-sidebar-owned) {
+  overflow: clip;
+}
+
 .gea-sidebar-owned {
   height: 100%;
   min-height: 0;
@@ -12,6 +16,7 @@
 .gea-sidebar-owned[data-gea-narrow] {
   padding-inline: 0;
 }
+
 .gea-sidebar-brand-row,
 .gea-sidebar-brand {
   display: flex;

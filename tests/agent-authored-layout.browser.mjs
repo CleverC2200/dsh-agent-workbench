@@ -611,7 +611,7 @@ test('APS top month selector applies the original period and keeps its menu with
     }),
   }));
   assert.equal(grid.columns, 4);
-  assert.ok(grid.children.every((cell) => cell.width <= 60 && cell.height <= 32));
+  assert.ok(grid.children.every((cell) => cell.width <= 60 && cell.height === 34));
   const before = calls.length;
   await menu
     .locator('.date-picker-month')

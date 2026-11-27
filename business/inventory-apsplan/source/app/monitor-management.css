@@ -468,8 +468,21 @@
   text-align: left;
   padding-right: 36px;
   position: relative;
-  line-height: 20px;
+  border: 1px solid var(--workbench-control-border, #d9dde3);
+  border-radius: 10px;
+  background: var(--workbench-surface, #ffffff);
+  color: var(--workbench-text, #343b46);
+  box-shadow: 0 1px 2px #1822300a;
+  font: 700 12px / 18px var(--workbench-font-family, sans-serif);
   display: block;
+}
+.am-panel .am-select-trigger:hover:not(:disabled) {
+  border-color: #efabb4;
+  background: var(--workbench-hover, #fffafb);
+}
+.am-panel .am-select-trigger:is([aria-expanded='true'], :focus-visible) {
+  border-color: var(--workbench-brand, #df1732);
+  box-shadow: 0 0 0 3px #df17321a;
 }
 .am-select-trigger:after {
   content: '';
@@ -493,13 +506,15 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(100% + 6px);
-  z-index: 20;
-  background: #fff;
-  border: 1px solid #e3e6ea;
-  border-radius: 10px;
-  box-shadow: 0 8px 28px #20232a1a;
-  padding: 6px;
+  top: calc(100% + 7px);
+  z-index: 80;
+  background: var(--workbench-surface, #ffffff);
+  border: 1px solid var(--workbench-border, #e7e9ee);
+  border-radius: 12px;
+  box-shadow:
+    0 14px 38px #18223024,
+    0 2px 8px #1822300a;
+  padding: 5px;
   overflow: hidden;
 }
 .am-panel .am-select-search {
@@ -518,30 +533,29 @@
   display: block;
   width: 100%;
   min-height: 34px;
-  padding: 8px 30px 8px 10px;
+  padding: 7px 30px 7px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   text-align: left;
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 400;
-  background: white;
-  color: #555d68;
+  font: 700 12px / 18px var(--workbench-font-family, sans-serif);
+  background: var(--workbench-surface, #ffffff);
+  color: var(--workbench-text, #343b46);
   position: relative;
 }
 .am-panel .am-option:hover,
 .am-panel .am-option:focus-visible {
-  background: #f5f6f8;
+  background: var(--workbench-hover, #fffafb);
   box-shadow: none !important;
 }
 .am-panel .am-option[aria-selected='true'] {
-  background: #fff1f3;
-  color: #df1732;
+  background: var(--workbench-brand-soft, #fff0f2);
+  color: var(--workbench-text, #343b46);
 }
 .am-option[aria-selected='true']:after {
   content: '✓';
   position: absolute;
   right: 12px;
+  color: var(--workbench-brand, #df1732);
 }
 .am-select-empty {
   padding: 20px 12px;
