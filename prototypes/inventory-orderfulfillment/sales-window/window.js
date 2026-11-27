@@ -264,9 +264,11 @@ function status() {
             : '已保存暂缓决定，截止：') + d.deferred_until
         : d?.action_id === 'confirm_shipment'
           ? '已保存销售确认决定'
-          : state?.status === 'processing'
-            ? '正在处理，请稍后刷新'
-            : '该订单确认任务已结束';
+          : state?.editor?.modificationState === 'succeeded'
+            ? '已提交OMS，本次提交已完成，请勿重复提交。'
+            : state?.status === 'processing'
+              ? '正在处理，请稍后刷新'
+              : '该订单确认任务已结束';
   }
 }
 async function load() {
@@ -390,6 +392,42 @@ async function load() {
             if (modifying) await load();
             throw Error(receipt.message || '处理状态：' + receipt.status + '，请重新核对后操作');
           }
+          if (modifying && receipt.orderModified === true) {
+            state = {
+              ...state,
+              status: 'resolved',
+              submission: { status: 'submitted', label: '已提交' },
+              editor: {
+                ...state.editor,
+                editable: false,
+                canSubmit: false,
+                modificationState: 'succeeded',
+                submission: { status: 'submitted', label: '已提交' },
+                submittedOrder: {
+                  ...draft,
+                  vehicleType: draft.vehicleType || state.snapshot.vehicleType,
+                },
+                reason: '已提交OMS，本次提交已完成，请勿重复提交。',
+              },
+              orderRefresh: { status: 'waiting', message: '已提交，正在读取最新订单状态。' },
+            };
+            const showReceipt = () =>
+              window.OrderShortageEditor.mount(document, {
+                ...state,
+                onRefreshOrder: () => load(),
+              });
+            showReceipt();
+            try {
+              await load();
+            } catch {
+              state.orderRefresh = {
+                status: 'waiting',
+                message: '已提交成功，最新状态读取失败，请刷新查看；请勿重复提交。',
+              };
+              showReceipt();
+            }
+            return;
+          }
           await load();
         } catch (error) {
           if (
@@ -435,7 +473,9 @@ async function load() {
       link.textContent = row.snapshot.orderNo;
       link.href = row.entryUrl + '&view=details';
       info.textContent =
-        row.snapshot.customer + '；' + (row.status === 'pending' ? '待处理' : '已处理');
+        row.snapshot.customer +
+        '；' +
+        (row.submission?.label || (row.status === 'pending' ? '待处理' : '已处理'));
       item.append(link, info);
       if (row.status === 'pending') {
         const reason = document.createElement('p');

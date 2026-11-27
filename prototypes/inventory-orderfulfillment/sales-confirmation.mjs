@@ -169,16 +169,18 @@ export function mountSalesConfirmation(document, simulation, formal) {
             if (!alive()) return;
             completed = true;
             status.textContent =
-              result.status === 'resolved'
-                ? '该订单快照已有处理记录，可在确认状态中查看。'
-                : result.delivery === 'sent'
-                  ? '确认卡片已发送，等待指定人员处理；不代表 OMS 已执行。'
-                  : result.delivery === 'failed'
-                    ? '任务已保存，卡片发送失败；请核对状态后重试。'
-                    : result.delivery === 'verification_required'
-                      ? '发送结果待核实，请查看确认状态，不要重复发起。'
-                      : '确认任务已创建，卡片正在发送，请在确认状态中查看结果。';
-            send.textContent = '确认任务已登记';
+              result.duplicatePrevented === true
+                ? result.message
+                : result.status === 'resolved'
+                  ? '该订单快照已有处理记录，可在确认状态中查看。'
+                  : result.delivery === 'sent'
+                    ? '确认卡片已发送，等待指定人员处理；不代表 OMS 已执行。'
+                    : result.delivery === 'failed'
+                      ? '任务已保存，卡片发送失败；请核对状态后重试。'
+                      : result.delivery === 'verification_required'
+                        ? '发送结果待核实，请查看确认状态，不要重复发起。'
+                        : '确认任务已创建，卡片正在发送，请在确认状态中查看结果。';
+            send.textContent = result.duplicatePrevented === true ? '未重复发卡' : '确认任务已登记';
           } catch (error) {
             if (alive()) status.textContent = error.message;
           } finally {
